@@ -18,6 +18,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { DAY_OPTIONS, INITIAL_HABITS } from './src/constants/habits';
 import {
   buildCurrentMonthCalendar,
@@ -657,7 +658,8 @@ export default function App() {
   }
 
   return (
-    <SafeAreaView style={[styles.screen, { backgroundColor: palette.bg, paddingTop: topInset }]}> 
+    <GestureHandlerRootView style={styles.screen}>
+      <SafeAreaView style={[styles.screen, { backgroundColor: palette.bg, paddingTop: topInset }]}> 
       <ExpoStatusBar style={isDarkTheme ? 'light' : 'dark'} />
       <LinearGradient
         colors={isDarkTheme ? ['#000000', '#000000'] : ['#f3efff', '#ebe5ff', '#f8f6ff']}
@@ -736,6 +738,7 @@ export default function App() {
             habitFilter={habitFilter}
             onSetHabitFilter={setHabitFilter}
             filteredHabits={filteredHabits}
+            onReorderHabits={setHabits}
             todayCompletions={todayCompletions}
             editingHabitId={editingHabitId}
             editHabitName={editHabitName}
@@ -998,7 +1001,8 @@ export default function App() {
           <Text style={[styles.tabText, { color: activeTab === 'profile' ? palette.accent : palette.muted }]}>Profile</Text>
         </Pressable>
       </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
 
