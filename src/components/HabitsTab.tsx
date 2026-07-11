@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
@@ -64,6 +65,14 @@ export function HabitsTab({
   onUnarchiveHabit,
   onDeleteHabit,
 }: HabitsTabProps) {
+  const [reorderMode, setReorderMode] = useState(false);
+
+  useEffect(() => {
+    if (habitFilter !== 'active' && reorderMode) {
+      setReorderMode(false);
+    }
+  }, [habitFilter, reorderMode]);
+
   const renderHabitRow = (habit: Habit, drag?: () => void, isActive?: boolean) => {
     const todayValue = todayCompletions[habit.id] ?? 0;
     const checked = habit.taskType === 'measurable' ? todayValue >= (habit.targetValue ?? 1) : todayValue > 0;
@@ -247,7 +256,25 @@ export function HabitsTab({
   return (
     <View style={styles.tabBody}>
       <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 
-        <Text style={[styles.sectionTitle, { color: palette.text }]}>All Habits</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <Text style={[styles.sectionTitle, { color: palette.text }]}>All Habits</Text>
+          {habitFilter === 'active' ? (
+            <Pressable
+              onPress={() => setReorderMode((prev) => !prev)}
+              style={[
+                styles.slimCheckButton,
+                {
+                  backgroundColor: reorderMode ? palette.accent : palette.bg,
+                  borderColor: palette.border,
+                },
+              ]}
+            >
+              <Text style={{ color: reorderMode ? '#fff' : palette.text, fontWeight: '700' }}>
+                {reorderMode ? 'Done' : 'Reorder'}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
         <View style={styles.frequencyRow}>
           <Pressable
             onPress={() => onSetHabitFilter('active')}
@@ -287,9 +314,13 @@ export function HabitsTab({
           </Pressable>
         </View>
 
+        {habitFilter === 'active' && reorderMode ? (
+          <Text style={[styles.habitInfo, { color: palette.muted }]}>Long press the menu icon to drag and reorder habits.</Text>
+        ) : null}
+
         {filteredHabits.length === 0 ? (
           <Text style={[styles.habitInfo, { color: palette.muted }]}>No habits in this filter.</Text>
-        ) : habitFilter === 'active' ? (
+        ) : habitFilter === 'active' && reorderMode ? (
           <DraggableFlatList
             data={filteredHabits}
             keyExtractor={(item) => item.id}
@@ -300,8 +331,8 @@ export function HabitsTab({
                 return [...data, ...archived];
               })
             }
-            scrollEnabled
-            nestedScrollEnabled
+            scrollEnabled={false}
+            nestedScrollEnabled={false}
             activationDistance={8}
           />
         ) : (
