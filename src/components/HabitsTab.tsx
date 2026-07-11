@@ -300,7 +300,8 @@ export function HabitsTab({
                 return [...data, ...archived];
               })
             }
-            scrollEnabled={false}
+            scrollEnabled
+            nestedScrollEnabled
             activationDistance={8}
           />
         ) : (

@@ -72,6 +72,7 @@ export default function App() {
   const [onboardingName, setOnboardingName] = useState('');
   const [onboardingError, setOnboardingError] = useState('');
   const [toastMessage, setToastMessage] = useState('');
+  const [selectedCalendarDateKey, setSelectedCalendarDateKey] = useState<string | null>(null);
 
   const todayKey = getDateKey(new Date());
   const todayCompletions = checkIns[todayKey] ?? {};
@@ -170,6 +171,44 @@ export default function App() {
   const bestStreak = countLongestGlobalStreak(checkIns);
   const weekProgress = buildWeekProgress(checkIns, activeHabits);
   const monthCalendar = buildCurrentMonthCalendar(checkIns, activeHabits);
+  const selectedCalendarProgress = useMemo(() => {
+    if (!selectedCalendarDateKey) {
+      return null;
+    }
+
+    const dayEntries = checkIns[selectedCalendarDateKey] ?? {};
+    const completed = activeHabits.filter((habit) => {
+      const value = dayEntries[habit.id] ?? 0;
+      return habit.taskType === 'measurable' ? value >= (habit.targetValue ?? 1) : value > 0;
+    }).length;
+
+    const items = activeHabits.map((habit) => {
+      const value = dayEntries[habit.id] ?? 0;
+      const done = habit.taskType === 'measurable' ? value >= (habit.targetValue ?? 1) : value > 0;
+      const detail =
+        habit.taskType === 'measurable'
+          ? `${value}/${habit.targetValue ?? 1} ${habit.measurableUnit ?? 'units'}`
+          : done
+            ? 'Completed'
+            : 'Not completed';
+
+      return {
+        id: habit.id,
+        name: habit.name,
+        done,
+        isBinary: habit.taskType !== 'measurable',
+        detail,
+      };
+    });
+
+    return {
+      dateLabel: format(new Date(`${selectedCalendarDateKey}T00:00:00`), 'EEE, MMM d'),
+      completion: activeHabits.length === 0 ? 0 : Math.round((completed / activeHabits.length) * 100),
+      completed,
+      total: activeHabits.length,
+      items,
+    };
+  }, [selectedCalendarDateKey, checkIns, activeHabits]);
   const completionDays = Object.values(checkIns).filter((value) => Object.values(value).some(Boolean)).length;
   const archivedCount = habits.filter((habit) => habit.archived).length;
   const topInset = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
@@ -667,7 +706,11 @@ export default function App() {
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-      <ScrollView contentContainerStyle={styles.scrollArea} {...panResponder.panHandlers}>
+      <ScrollView
+        contentContainerStyle={styles.scrollArea}
+        nestedScrollEnabled
+        {...(activeTab === 'habits' ? {} : panResponder.panHandlers)}
+      >
         {activeTab === 'dashboard' ? (
           <LinearGradient
             colors={isDarkTheme ? ['#121212', '#050505'] : [palette.accent2, palette.accent]}
@@ -901,40 +944,98 @@ export default function App() {
                 ))}
               </View>
               <View style={styles.calendarGrid}>
-                {monthCalendar.cells.map((cell) => (
-                  <View
-                    key={cell.key}
-                    style={[
-                      styles.calendarCell,
-                      {
-                        backgroundColor: cell.isToday ? palette.accent : palette.bg,
-                        opacity: cell.isEmpty ? 0 : 1,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={{
-                        color: cell.isToday ? '#fff' : palette.text,
-                        fontWeight: '700',
-                        fontSize: 12,
-                      }}
+                {monthCalendar.cells.map((cell) => {
+                  if (cell.isEmpty) {
+                    return <View key={cell.key} style={[styles.calendarCell, { opacity: 0 }]} />;
+                  }
+
+                  const selected = selectedCalendarDateKey === cell.key;
+                  return (
+                    <Pressable
+                      key={cell.key}
+                      onPress={() => setSelectedCalendarDateKey(cell.key)}
+                      style={[
+                        styles.calendarCell,
+                        {
+                          backgroundColor: cell.isToday ? palette.accent : palette.bg,
+                        },
+                        selected
+                          ? {
+                              borderWidth: 1,
+                              borderColor: palette.accent,
+                            }
+                          : null,
+                      ]}
                     >
-                      {cell.label}
-                    </Text>
-                    <View style={[styles.calendarCompletionTrack, { backgroundColor: palette.border }]}> 
-                      <View
-                        style={[
-                          styles.calendarCompletionFill,
-                          {
-                            width: `${cell.completion}%`,
-                            backgroundColor: cell.isToday ? '#fff' : palette.accent,
-                          },
-                        ]}
-                      />
-                    </View>
-                  </View>
-                ))}
+                      <Text
+                        style={{
+                          color: cell.isToday ? '#fff' : palette.text,
+                          fontWeight: '700',
+                          fontSize: 12,
+                        }}
+                      >
+                        {cell.label}
+                      </Text>
+                      <View style={[styles.calendarCompletionTrack, { backgroundColor: palette.border }]}> 
+                        <View
+                          style={[
+                            styles.calendarCompletionFill,
+                            {
+                              width: `${cell.completion}%`,
+                              backgroundColor: cell.isToday ? '#fff' : palette.accent,
+                            },
+                          ]}
+                        />
+                      </View>
+                    </Pressable>
+                  );
+                })}
               </View>
+              {selectedCalendarProgress ? (
+                <View style={[styles.calendarDetailCard, { backgroundColor: palette.bg, borderColor: palette.border }]}> 
+                  <View style={styles.calendarDetailHeader}>
+                    <Text style={[styles.calendarDetailDate, { color: palette.text }]}>{selectedCalendarProgress.dateLabel}</Text>
+                    <Text style={[styles.reminderTime, { color: palette.accent }]}>
+                      {selectedCalendarProgress.completion}%
+                    </Text>
+                  </View>
+                  <Text style={[styles.calendarDetailSummary, { color: palette.muted }]}>
+                    {selectedCalendarProgress.completed} of {selectedCalendarProgress.total} habits completed
+                  </Text>
+                  <View style={styles.calendarDetailList}>
+                    {selectedCalendarProgress.items.map((item) => (
+                      <View key={item.id} style={styles.calendarDetailItem}>
+                        <Text
+                          style={[
+                            styles.calendarDetailHabitName,
+                            {
+                              color: item.done ? palette.text : palette.muted,
+                              fontWeight: item.done ? '700' : '600',
+                            },
+                          ]}
+                        >
+                          {item.name}
+                        </Text>
+                        {item.isBinary && item.done ? (
+                          <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
+                        ) : (
+                          <Text
+                            style={{
+                              color: item.done ? '#22c55e' : palette.muted,
+                              fontSize: 11,
+                              fontWeight: '400',
+                            }}
+                          >
+                            {item.detail}
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : (
+                <Text style={[styles.habitInfo, { color: palette.muted, marginTop: 10 }]}>Tap a date to view that day's progress.</Text>
+              )}
             </View>
 
             <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 
@@ -1607,6 +1708,40 @@ const styles = StyleSheet.create({
   },
   calendarCompletionFill: {
     height: '100%',
+  },
+  calendarDetailCard: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    gap: 6,
+  },
+  calendarDetailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  calendarDetailDate: {
+    fontSize: 14,
+    fontWeight: '800',
+    flexShrink: 1,
+  },
+  calendarDetailSummary: {
+    fontSize: 12,
+  },
+  calendarDetailList: {
+    marginTop: 4,
+    gap: 6,
+  },
+  calendarDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  calendarDetailHabitName: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '100',
   },
   reminderRow: {
     paddingVertical: 8,

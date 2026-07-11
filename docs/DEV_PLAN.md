@@ -44,6 +44,14 @@ Details: Installed @expo/vector-icons via Expo install to resolve Metro import f
 Status: Android Play Store build completed successfully.
 Details: EAS build e36ce221 finished and produced an AAB artifact for production profile (SDK 57.0.0, app version 1.0.0 (1)); logs show all build phases completed.
 
+7. Date: 2026-07-11
+Status: Habit sorting behavior finalized.
+Details: Drag reorder is enabled for Active habits only; reordered active list persists and is reflected in Home because App state is the single source of truth.
+
+8. Date: 2026-07-11
+Status: Local data and reminder flow validated.
+Details: App hydrates persisted state from AsyncStorage at launch, UI reads data via App props, and reminder schedules are synced via expo-notifications for active habits.
+
 ## Decision Register
 All major product and technical decisions are tracked here.
 
