@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "habit-tracker",
-    "slug": "habit-tracker",
-    "version": "1.0.0",
+    "name": "Habitty",
+    "slug": "habitty",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -10,9 +10,11 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.habitty.app",
+      "versionCode": 2,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
@@ -20,6 +22,32 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c7eea6eb-840c-4cdd-857e-c8447126f51f"
+      }
+    },
+    "owner": "habitash",
+    "plugins": [
+      "@react-native-community/datetimepicker",
+      [
+        "expo-widgets",
+        {
+          "widgets": [
+            {
+              "name": "HabitTasksWidget",
+              "displayName": "Habit Tasks",
+              "description": "Check off your daily habits quickly.",
+              "supportedFamilies": [
+                "systemSmall",
+                "systemMedium"
+              ]
+            }
+          ]
+        }
+      ],
+      "expo-font"
+    ]
   }
 }
