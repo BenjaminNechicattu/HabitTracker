@@ -18,11 +18,11 @@ type ProfileTabProps = {
   isDarkTheme: boolean;
   draftName: string;
   selectedAvatar: string;
-  themeMode: 'system' | 'light' | 'dark';
+  themeMode: 'system' | 'light' | 'dark' | 'amoled';
   themeColor: ThemeColor;
   onChangeName: (value: string) => void;
   onSelectAvatar: (value: string) => void;
-  onSetThemeMode: (value: 'system' | 'light' | 'dark') => void;
+  onSetThemeMode: (value: 'system' | 'light' | 'dark' | 'amoled') => void;
   onSetThemeColor: (value: ThemeColor) => void;
   onClearAllData: () => void | Promise<void>;
   onSaveProfile: () => void;
@@ -30,10 +30,12 @@ type ProfileTabProps = {
 
 const THEME_COLOR_OPTIONS: { key: ThemeColor; label: string; color: string }[] = [
   { key: 'violet', label: 'Violet', color: '#7e66ff' },
+  { key: 'blue', label: 'Blue', color: '#2563eb' },
   { key: 'teal', label: 'Teal', color: '#15b2ae' },
-  { key: 'sunset', label: 'Sunset', color: '#ef863f' },
-  { key: 'rose', label: 'Rose', color: '#dc5d92' },
-  { key: 'forest', label: 'Forest', color: '#2f8f4e' },
+  { key: 'forest', label: 'Green', color: '#2f8f4e' },
+  { key: 'sunset', label: 'Orange', color: '#ef863f' },
+  { key: 'rose', label: 'Pink', color: '#dc5d92' },
+  { key: 'red', label: 'Red', color: '#dc2626' },
   { key: 'gray', label: 'Gray', color: '#7f8791' },
 ];
 
@@ -145,7 +147,7 @@ export function ProfileTab({
       <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 
         <View>
           <Text style={[styles.sectionTitle, { color: palette.text }]}>Theme</Text>
-          <Text style={[styles.habitInfo, { color: palette.muted }]}>Choose system, light, or dark mode.</Text>
+          <Text style={[styles.habitInfo, { color: palette.muted }]}>Choose system, light, dark, or AMOLED mode.</Text>
         </View>
         <View style={styles.frequencyRow}>
           <Pressable
@@ -183,6 +185,18 @@ export function ProfileTab({
             ]}
           >
             <Text style={{ color: themeMode === 'dark' ? '#fff' : palette.text, fontWeight: '700' }}>Dark</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => onSetThemeMode('amoled')}
+            style={[
+              styles.frequencyButton,
+              {
+                backgroundColor: themeMode === 'amoled' ? palette.accent : palette.bg,
+                borderColor: palette.border,
+              },
+            ]}
+          >
+            <Text style={{ color: themeMode === 'amoled' ? '#fff' : palette.text, fontWeight: '700' }}>AMOLED</Text>
           </Pressable>
         </View>
 

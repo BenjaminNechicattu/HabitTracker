@@ -75,7 +75,7 @@ export async function requestReminderPermissions(): Promise<boolean> {
 
 async function scheduleHabit(habit: Habit): Promise<string[]> {
   const parsedTime = parseReminderTime(habit.reminderTime);
-  if (!habit.reminderEnabled || !parsedTime) {
+  if (!habit.reminderEnabled || habit.reminderMuted || !parsedTime) {
     return [];
   }
 

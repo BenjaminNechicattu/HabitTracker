@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Switch, Text, TextInput, View } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { getHabitIconName } from '../constants/habitIcons';
@@ -23,13 +23,17 @@ type HabitsTabProps = {
   filteredHabits: Habit[];
   onReorderHabits: (updater: (prev: Habit[]) => Habit[]) => void;
   todayCompletions: Record<string, number>;
+  groupByType: boolean;
+  onSetGroupByType: (value: boolean) => void;
   editingHabitId: string | null;
   editHabitName: string;
   editHabitCategory: string;
   editHabitReminder: string;
+  editHabitReminderEnabled: boolean;
   onEditHabitName: (value: string) => void;
   onEditHabitCategory: (value: string) => void;
   onEditHabitReminder: (value: string) => void;
+  onEditHabitReminderEnabled: (value: boolean) => void;
   onSaveEditedHabit: (habitId: string) => void;
   onCancelEditHabit: () => void;
   onStartEditHabit: (habit: Habit) => void;
@@ -49,13 +53,17 @@ export function HabitsTab({
   filteredHabits,
   onReorderHabits,
   todayCompletions,
+  groupByType,
+  onSetGroupByType,
   editingHabitId,
   editHabitName,
   editHabitCategory,
   editHabitReminder,
+  editHabitReminderEnabled,
   onEditHabitName,
   onEditHabitCategory,
   onEditHabitReminder,
+  onEditHabitReminderEnabled,
   onSaveEditedHabit,
   onCancelEditHabit,
   onStartEditHabit,
@@ -118,13 +126,29 @@ export function HabitsTab({
                 placeholder="Category"
                 placeholderTextColor={palette.muted}
               />
-              <TextInput
-                style={[styles.input, { borderColor: palette.border, color: palette.text }]}
-                value={editHabitReminder}
-                onChangeText={onEditHabitReminder}
-                placeholder="Reminder (HH:MM)"
-                placeholderTextColor={palette.muted}
-              />
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingVertical: 4,
+                }}
+              >
+                <Text style={{ color: palette.text, fontWeight: '700', fontSize: 13 }}>Notifications</Text>
+                <Switch
+                  value={editHabitReminderEnabled}
+                  onValueChange={onEditHabitReminderEnabled}
+                />
+              </View>
+              {editHabitReminderEnabled ? (
+                <TextInput
+                  style={[styles.input, { borderColor: palette.border, color: palette.text }]}
+                  value={editHabitReminder}
+                  onChangeText={onEditHabitReminder}
+                  placeholder="Reminder (HH:MM)"
+                  placeholderTextColor={palette.muted}
+                />
+              ) : null}
             </View>
           ) : (
             <View style={styles.habitMeta}>
@@ -253,27 +277,44 @@ export function HabitsTab({
     <ScaleDecorator>{renderHabitRow(item, drag, isActive)}</ScaleDecorator>
   );
 
+  const yesNoHabits = filteredHabits.filter((h) => h.taskType !== 'measurable');
+  const measurableHabits = filteredHabits.filter((h) => h.taskType === 'measurable');
+
   return (
     <View style={styles.tabBody}>
       <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <Text style={[styles.sectionTitle, { color: palette.text }]}>All Habits</Text>
-          {habitFilter === 'active' ? (
+          <View style={{ flexDirection: 'row', gap: 8 }}>
             <Pressable
-              onPress={() => setReorderMode((prev) => !prev)}
+              onPress={() => onSetGroupByType(!groupByType)}
               style={[
                 styles.slimCheckButton,
                 {
-                  backgroundColor: reorderMode ? palette.accent : palette.bg,
+                  backgroundColor: groupByType ? palette.accent : palette.bg,
                   borderColor: palette.border,
                 },
               ]}
             >
-              <Text style={{ color: reorderMode ? '#fff' : palette.text, fontWeight: '700' }}>
-                {reorderMode ? 'Done' : 'Reorder'}
-              </Text>
+              <Text style={{ color: groupByType ? '#fff' : palette.text, fontWeight: '700' }}>Group</Text>
             </Pressable>
-          ) : null}
+            {habitFilter === 'active' ? (
+              <Pressable
+                onPress={() => setReorderMode((prev) => !prev)}
+                style={[
+                  styles.slimCheckButton,
+                  {
+                    backgroundColor: reorderMode ? palette.accent : palette.bg,
+                    borderColor: palette.border,
+                  },
+                ]}
+              >
+                <Text style={{ color: reorderMode ? '#fff' : palette.text, fontWeight: '700' }}>
+                  {reorderMode ? 'Done' : 'Reorder'}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
         <View style={styles.frequencyRow}>
           <Pressable
@@ -335,6 +376,21 @@ export function HabitsTab({
             nestedScrollEnabled={false}
             activationDistance={8}
           />
+        ) : groupByType ? (
+          <View>
+            {yesNoHabits.length > 0 ? (
+              <View>
+                <Text style={[styles.habitInfo, { color: palette.accent, fontWeight: '800', marginBottom: 4 }]}>✅ Yes / No</Text>
+                {yesNoHabits.map((habit) => renderHabitRow(habit))}
+              </View>
+            ) : null}
+            {measurableHabits.length > 0 ? (
+              <View style={{ marginTop: yesNoHabits.length > 0 ? 10 : 0 }}>
+                <Text style={[styles.habitInfo, { color: palette.accent, fontWeight: '800', marginBottom: 4 }]}>📏 Measurable</Text>
+                {measurableHabits.map((habit) => renderHabitRow(habit))}
+              </View>
+            ) : null}
+          </View>
         ) : (
           <View>{filteredHabits.map((habit) => renderHabitRow(habit))}</View>
         )}

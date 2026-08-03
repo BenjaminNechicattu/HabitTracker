@@ -25,6 +25,8 @@ type DashboardTabProps = {
   activeHabits: Habit[];
   todayCompletions: Record<string, number>;
   checkIns: CheckInMap;
+  groupByType: boolean;
+  onSetGroupByType: (value: boolean) => void;
   onToggleHabitCompletion: (habitId: string) => void;
   onSetHabitProgress: (habitId: string, value: number) => void;
   onOpenStreak: () => void;
@@ -40,6 +42,8 @@ export function DashboardTab({
   activeHabits,
   todayCompletions,
   checkIns,
+  groupByType,
+  onSetGroupByType,
   onToggleHabitCompletion,
   onSetHabitProgress,
   onOpenStreak,
@@ -47,6 +51,81 @@ export function DashboardTab({
   const progressBackground = isDarkTheme ? '#171717' : '#ddd2fb';
   const progressLabelColor = isDarkTheme ? '#ffffff' : '#2f2352';
   const progressCaptionColor = isDarkTheme ? palette.muted : '#5a4b84';
+
+  const renderHabitRow = (habit: Habit) => {
+    const todayValue = todayCompletions[habit.id] ?? 0;
+    const checked = habit.taskType === 'measurable' ? todayValue >= (habit.targetValue ?? 1) : todayValue > 0;
+    const habitStreak = countStreakForHabit(habit, checkIns);
+    const iconName = getHabitIconName(habit.category);
+    const iconBg = checked ? '#efeaff' : isDarkTheme ? '#171717' : '#f6f2ff';
+    const progressLabel =
+      habit.taskType === 'measurable'
+        ? `${todayValue} / ${habit.targetValue ?? 1} ${habit.measurableUnit ?? 'units'}`
+        : `${habitStreak} day streak`;
+    return (
+      <View key={habit.id} style={[styles.habitRow, { borderBottomColor: palette.border }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+          <View style={[styles.habitAvatar, { backgroundColor: iconBg }]}>
+            <Ionicons name={iconName as any} size={16} color={palette.accent} />
+          </View>
+          <View style={styles.habitMeta}>
+            <Text style={[styles.habitName, { color: palette.text }]}>{habit.name}</Text>
+            <Text style={[styles.habitInfo, { color: palette.muted }]}>{progressLabel}</Text>
+          </View>
+        </View>
+
+        {habit.taskType === 'measurable' ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Pressable
+              onPress={() => onSetHabitProgress(habit.id, todayValue - 1)}
+              style={[styles.checkPill, { borderColor: palette.border, backgroundColor: isDarkTheme ? '#111111' : '#f3eeff' }]}
+            >
+              <Text style={{ color: palette.text, fontWeight: '700' }}>-</Text>
+            </Pressable>
+            <TextInput
+              value={String(todayValue)}
+              keyboardType="number-pad"
+              onChangeText={(text) => {
+                const parsed = Number(text.replace(/[^0-9]/g, ''));
+                onSetHabitProgress(habit.id, Number.isFinite(parsed) ? parsed : 0);
+              }}
+              style={{
+                width: 44,
+                height: 32,
+                borderWidth: 1,
+                borderRadius: 10,
+                borderColor: palette.border,
+                color: palette.text,
+                textAlign: 'center',
+                backgroundColor: isDarkTheme ? '#111111' : '#ffffff',
+                fontWeight: '700',
+                paddingVertical: 0,
+              }}
+            />
+            <Pressable
+              onPress={() => onSetHabitProgress(habit.id, todayValue + 1)}
+              style={[styles.checkPill, { borderColor: checked ? palette.accent : palette.border, backgroundColor: checked ? palette.accent : isDarkTheme ? '#111111' : '#f3eeff' }]}
+            >
+              <Text style={{ color: checked ? '#fff' : palette.text, fontWeight: '700' }}>+</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            onPress={() => onToggleHabitCompletion(habit.id)}
+            style={[
+              styles.checkPill,
+              {
+                borderColor: checked ? palette.accent : palette.border,
+                backgroundColor: checked ? palette.accent : isDarkTheme ? '#111111' : '#f3eeff',
+              },
+            ]}
+          >
+            <MaterialCommunityIcons name={checked ? 'check' : 'checkbox-blank-circle-outline'} size={14} color={checked ? '#fff' : palette.muted} />
+          </Pressable>
+        )}
+      </View>
+    );
+  };
 
   return (
     <View style={styles.tabBody}>
@@ -89,85 +168,42 @@ export function DashboardTab({
       </View>
 
       <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 
-        <Text style={[styles.sectionTitle, { color: palette.text }]}>Today</Text>
-        {activeHabits.map((habit) => {
-          const todayValue = todayCompletions[habit.id] ?? 0;
-          const target = habit.targetValue ?? 1;
-          const checked = habit.taskType === 'measurable' ? todayValue >= (habit.targetValue ?? 1) : todayValue > 0;
-          const habitStreak = countStreakForHabit(habit, checkIns);
-          const iconName = getHabitIconName(habit.category);
-          const iconBg = checked ? '#efeaff' : isDarkTheme ? '#171717' : '#f6f2ff';
-          const progressLabel =
-            habit.taskType === 'measurable'
-              ? `${todayValue} / ${habit.targetValue ?? 1} ${habit.measurableUnit ?? 'units'}`
-              : `${habitStreak} day streak`;
-          return (
-            <View key={habit.id} style={[styles.habitRow, { borderBottomColor: palette.border }]}> 
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-                <View style={[styles.habitAvatar, { backgroundColor: iconBg }]}> 
-                  <Ionicons name={iconName as any} size={16} color={palette.accent} />
-                </View>
-                <View style={styles.habitMeta}>
-                  <Text style={[styles.habitName, { color: palette.text }]}>{habit.name}</Text>
-                  <Text style={[styles.habitInfo, { color: palette.muted }]}>
-                    {progressLabel}
-                  </Text>
-                </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={[styles.sectionTitle, { color: palette.text }]}>Today</Text>
+          <Pressable
+            onPress={() => onSetGroupByType(!groupByType)}
+            style={{
+              borderWidth: 1,
+              borderColor: palette.border,
+              borderRadius: 10,
+              paddingHorizontal: 10,
+              paddingVertical: 5,
+              backgroundColor: groupByType ? palette.accent : palette.bg,
+            }}
+          >
+            <Text style={{ color: groupByType ? '#fff' : palette.text, fontWeight: '700', fontSize: 12 }}>Group</Text>
+          </Pressable>
+        </View>
+        {activeHabits.length === 0 ? (
+          <Text style={[styles.habitInfo, { color: palette.muted }]}>No active habits yet.</Text>
+        ) : groupByType ? (
+          <>
+            {activeHabits.some((h) => h.taskType !== 'measurable') ? (
+              <View>
+                <Text style={[styles.habitInfo, { color: palette.accent, fontWeight: '800', marginBottom: 4 }]}>✅ Yes / No</Text>
+                {activeHabits.filter((h) => h.taskType !== 'measurable').map((habit) => renderHabitRow(habit))}
               </View>
-
-              {habit.taskType === 'measurable' ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Pressable
-                    onPress={() => onSetHabitProgress(habit.id, todayValue - 1)}
-                    style={[styles.checkPill, { borderColor: palette.border, backgroundColor: isDarkTheme ? '#111111' : '#f3eeff' }]}
-                  >
-                    <Text style={{ color: palette.text, fontWeight: '700' }}>-</Text>
-                  </Pressable>
-                  <TextInput
-                    value={String(todayValue)}
-                    keyboardType="number-pad"
-                    onChangeText={(text) => {
-                      const parsed = Number(text.replace(/[^0-9]/g, ''));
-                      onSetHabitProgress(habit.id, Number.isFinite(parsed) ? parsed : 0);
-                    }}
-                    style={{
-                      width: 44,
-                      height: 32,
-                      borderWidth: 1,
-                      borderRadius: 10,
-                      borderColor: palette.border,
-                      color: palette.text,
-                      textAlign: 'center',
-                      backgroundColor: isDarkTheme ? '#111111' : '#ffffff',
-                      fontWeight: '700',
-                      paddingVertical: 0,
-                    }}
-                  />
-                  <Pressable
-                    onPress={() => onSetHabitProgress(habit.id, todayValue + 1)}
-                    style={[styles.checkPill, { borderColor: checked ? palette.accent : palette.border, backgroundColor: checked ? palette.accent : isDarkTheme ? '#111111' : '#f3eeff' }]}
-                  >
-                    <Text style={{ color: checked ? '#fff' : palette.text, fontWeight: '700' }}>+</Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <Pressable
-                  onPress={() => onToggleHabitCompletion(habit.id)}
-                  style={[
-                    styles.checkPill,
-                    {
-                      borderColor: checked ? palette.accent : palette.border,
-                      backgroundColor: checked ? palette.accent : isDarkTheme ? '#111111' : '#f3eeff',
-                    },
-                  ]}
-                >
-                  <MaterialCommunityIcons name={checked ? 'check' : 'checkbox-blank-circle-outline'} size={14} color={checked ? '#fff' : palette.muted} />
-                </Pressable>
-              )}
-            </View>
-          );
-        })}
-        {activeHabits.length === 0 ? <Text style={[styles.habitInfo, { color: palette.muted }]}>No active habits yet.</Text> : null}
+            ) : null}
+            {activeHabits.some((h) => h.taskType === 'measurable') ? (
+              <View style={{ marginTop: activeHabits.some((h) => h.taskType !== 'measurable') ? 10 : 0 }}>
+                <Text style={[styles.habitInfo, { color: palette.accent, fontWeight: '800', marginBottom: 4 }]}>📏 Measurable</Text>
+                {activeHabits.filter((h) => h.taskType === 'measurable').map((habit) => renderHabitRow(habit))}
+              </View>
+            ) : null}
+          </>
+        ) : (
+          activeHabits.map((habit) => renderHabitRow(habit))
+        )}
       </View>
     </View>
   );

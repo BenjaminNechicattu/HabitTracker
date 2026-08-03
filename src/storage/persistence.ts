@@ -18,6 +18,7 @@ function normalizeHabit(habit: Habit): Habit {
     taskType,
     targetValue,
     measurableUnit,
+    reminderMuted: habit.reminderMuted === true,
   };
 }
 
@@ -75,7 +76,7 @@ export async function loadPersistedState(): Promise<PersistedState> {
     const parsed = JSON.parse(raw) as Partial<PersistedState>;
     const legacyDarkMode = (parsed as { darkMode?: unknown }).darkMode;
     const inferredThemeMode =
-      parsed.themeMode === 'light' || parsed.themeMode === 'dark' || parsed.themeMode === 'system'
+      parsed.themeMode === 'light' || parsed.themeMode === 'dark' || parsed.themeMode === 'system' || parsed.themeMode === 'amoled'
         ? parsed.themeMode
         : typeof legacyDarkMode === 'boolean'
           ? legacyDarkMode
@@ -88,7 +89,9 @@ export async function loadPersistedState(): Promise<PersistedState> {
       parsed.themeColor === 'sunset' ||
       parsed.themeColor === 'rose' ||
       parsed.themeColor === 'forest' ||
-      parsed.themeColor === 'gray'
+      parsed.themeColor === 'gray' ||
+      parsed.themeColor === 'blue' ||
+      parsed.themeColor === 'red'
         ? parsed.themeColor
         : 'violet';
 
@@ -108,6 +111,7 @@ export async function loadPersistedState(): Promise<PersistedState> {
           : 'person-circle-outline',
       profileAvatarImageUri:
         typeof parsed.profileAvatarImageUri === 'string' ? parsed.profileAvatarImageUri : '',
+      statsOrder: Array.isArray(parsed.statsOrder) ? (parsed.statsOrder as string[]) : undefined,
     };
   } catch {
     return {

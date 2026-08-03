@@ -11,7 +11,6 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   useColorScheme,
@@ -19,7 +18,8 @@ import {
   View,
 } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { DAY_OPTIONS, INITIAL_HABITS } from './src/constants/habits';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
+import { INITIAL_HABITS } from './src/constants/habits';
 import {
   buildCurrentMonthCalendar,
   buildWeekProgress,
@@ -30,7 +30,7 @@ import {
 import { syncHabitReminders } from './src/notifications/reminders';
 import { clearPersistedState, loadPersistedState, savePersistedState } from './src/storage/persistence';
 import { buildPalette } from './src/theme/palette';
-import { CheckInMap, Habit, PersistedState, TabKey, ThemeColor } from './src/types/habit';
+import { CheckInMap, Habit, PersistedState, STATS_SECTION_IDS, StatsSectionId, TabKey, ThemeColor } from './src/types/habit';
 import { AddHabitTab } from './src/components/AddHabitTab';
 import { DashboardTab } from './src/components/DashboardTab';
 import { HabitsTab } from './src/components/HabitsTab';
@@ -42,7 +42,7 @@ const TAB_SWIPE_ORDER: TabKey[] = ['dashboard', 'habits', 'add', 'progress', 'pr
 export default function App() {
   const [habits, setHabits] = useState<Habit[]>(INITIAL_HABITS);
   const [checkIns, setCheckIns] = useState<CheckInMap>({});
-  const [themeMode, setThemeMode] = useState<'system' | 'light' | 'dark'>('system');
+  const [themeMode, setThemeMode] = useState<'system' | 'light' | 'dark' | 'amoled'>('system');
   const [themeColor, setThemeColor] = useState<ThemeColor>('violet');
   const [activeTab, setActiveTab] = useState<TabKey>('dashboard');
   const [onboarded, setOnboarded] = useState(false);
@@ -64,6 +64,7 @@ export default function App() {
   const [editHabitName, setEditHabitName] = useState('');
   const [editHabitCategory, setEditHabitCategory] = useState('');
   const [editHabitReminder, setEditHabitReminder] = useState('07:00');
+  const [editHabitReminderEnabled, setEditHabitReminderEnabled] = useState(true);
   const [formError, setFormError] = useState('');
   const [profileName, setProfileName] = useState('Ben');
   const [profileAvatar, setProfileAvatar] = useState('person-circle-outline');
@@ -73,6 +74,9 @@ export default function App() {
   const [onboardingError, setOnboardingError] = useState('');
   const [toastMessage, setToastMessage] = useState('');
   const [selectedCalendarDateKey, setSelectedCalendarDateKey] = useState<string | null>(null);
+  const [groupByType, setGroupByType] = useState(false);
+  const [statsOrder, setStatsOrder] = useState<StatsSectionId[]>([...STATS_SECTION_IDS]);
+  const [statsReorderMode, setStatsReorderMode] = useState(false);
 
   const todayKey = getDateKey(new Date());
   const todayCompletions = checkIns[todayKey] ?? {};
@@ -96,6 +100,13 @@ export default function App() {
       setDraftProfileName(state.profileName);
       setDraftProfileAvatar(state.profileAvatar);
       setOnboardingName(state.profileName.trim() && state.profileName !== 'Ben' ? state.profileName : '');
+      if (Array.isArray(state.statsOrder) && state.statsOrder.length > 0) {
+        const validOrder = state.statsOrder.filter((id): id is StatsSectionId =>
+          (STATS_SECTION_IDS as readonly string[]).includes(id)
+        );
+        const missing = [...STATS_SECTION_IDS].filter((id) => !validOrder.includes(id));
+        setStatsOrder([...validOrder, ...missing]);
+      }
       setHydrated(true);
     };
 
@@ -123,12 +134,13 @@ export default function App() {
       onboarded,
       profileName,
       profileAvatar,
+      statsOrder,
     };
 
     savePersistedState(payload).catch(() => {
       // Keep UI responsive if persistence fails.
     });
-  }, [habits, checkIns, themeMode, themeColor, onboarded, profileName, profileAvatar, hydrated]);
+  }, [habits, checkIns, themeMode, themeColor, onboarded, profileName, profileAvatar, statsOrder, hydrated]);
 
   const activeHabits = useMemo(() => habits.filter((habit) => !habit.archived), [habits]);
 
@@ -257,6 +269,47 @@ export default function App() {
     });
   }, [activeHabits, checkIns]);
 
+  const perHabitStats = useMemo(() => {
+    return activeHabits.map((habit) => {
+      const lookbackDays = 30;
+      let completeCount = 0;
+      let streak = 0;
+      let streakRunning = true;
+      let totalCompletions = 0;
+
+      for (const dayEntries of Object.values(checkIns)) {
+        const value = dayEntries[habit.id] ?? 0;
+        const done = habit.taskType === 'measurable' ? value >= (habit.targetValue ?? 1) : value > 0;
+        if (done) {
+          totalCompletions += 1;
+        }
+      }
+
+      for (let i = 0; i < lookbackDays; i += 1) {
+        const dayKey = getDateKey(subDays(new Date(), i));
+        const value = checkIns[dayKey]?.[habit.id] ?? 0;
+        const done = habit.taskType === 'measurable' ? value >= (habit.targetValue ?? 1) : value > 0;
+        if (done) {
+          completeCount += 1;
+          if (streakRunning) {
+            streak += 1;
+          }
+        } else {
+          streakRunning = false;
+        }
+      }
+
+      return {
+        id: habit.id,
+        name: habit.name,
+        taskType: habit.taskType,
+        rate30d: Math.round((completeCount / lookbackDays) * 100),
+        streak,
+        totalCompletions,
+      };
+    });
+  }, [activeHabits, checkIns]);
+
   const widgetSnapshot = useMemo(() => {
     const widgetHabits = activeHabits.slice(0, 3).map((habit) => {
       const currentValue = todayCompletions[habit.id] ?? 0;
@@ -346,8 +399,9 @@ export default function App() {
       .sort((a, b) => (a.reminderTime ?? '').localeCompare(b.reminderTime ?? ''));
   }, [activeHabits]);
 
-  const isDarkTheme = themeMode === 'system' ? systemColorScheme === 'dark' : themeMode === 'dark';
-  const palette = buildPalette(isDarkTheme, themeColor);
+  const isDarkTheme = themeMode === 'system' ? systemColorScheme === 'dark' : themeMode === 'dark' || themeMode === 'amoled';
+  const isAmoled = themeMode === 'amoled';
+  const palette = buildPalette(isDarkTheme, themeColor, isAmoled);
 
   const saveProfile = () => {
     const trimmedName = draftProfileName.trim();
@@ -577,6 +631,7 @@ export default function App() {
     setEditHabitName(habit.name);
     setEditHabitCategory(habit.category);
     setEditHabitReminder(habit.reminderTime ?? '07:00');
+    setEditHabitReminderEnabled(habit.reminderEnabled);
   };
 
   const cancelEditHabit = () => {
@@ -584,6 +639,7 @@ export default function App() {
     setEditHabitName('');
     setEditHabitCategory('');
     setEditHabitReminder('07:00');
+    setEditHabitReminderEnabled(true);
   };
 
   const saveEditedHabit = (habitId: string) => {
@@ -594,7 +650,7 @@ export default function App() {
       return;
     }
 
-    if (editHabitReminder && !/^([01]\d|2[0-3]):([0-5]\d)$/.test(editHabitReminder.trim())) {
+    if (editHabitReminderEnabled && editHabitReminder && !/^([01]\d|2[0-3]):([0-5]\d)$/.test(editHabitReminder.trim())) {
       return;
     }
 
@@ -605,13 +661,20 @@ export default function App() {
               ...habit,
               name: trimmedName,
               category: trimmedCategory || 'General',
-              reminderTime: habit.reminderEnabled ? editHabitReminder.trim() : undefined,
+              reminderEnabled: editHabitReminderEnabled,
+              reminderTime: editHabitReminderEnabled ? editHabitReminder.trim() : undefined,
             }
           : habit,
       ),
     );
 
     cancelEditHabit();
+  };
+
+  const muteReminder = (habitId: string) => {
+    setHabits((prev) =>
+      prev.map((habit) => (habit.id === habitId ? { ...habit, reminderMuted: !habit.reminderMuted } : habit)),
+    );
   };
 
   const clearAllData = async () => {
@@ -628,6 +691,7 @@ export default function App() {
     setDraftProfileAvatar('person-circle-outline');
     setOnboardingName('');
     setOnboardingError('');
+    setStatsOrder([...STATS_SECTION_IDS]);
     setActiveTab('dashboard');
   };
 
@@ -741,6 +805,8 @@ export default function App() {
             activeHabits={activeHabits}
             todayCompletions={todayCompletions}
             checkIns={checkIns}
+            groupByType={groupByType}
+            onSetGroupByType={setGroupByType}
             onToggleHabitCompletion={toggleHabitCompletion}
             onSetHabitProgress={setHabitProgress}
             onOpenStreak={() => setActiveTab('streak')}
@@ -783,13 +849,17 @@ export default function App() {
             filteredHabits={filteredHabits}
             onReorderHabits={setHabits}
             todayCompletions={todayCompletions}
+            groupByType={groupByType}
+            onSetGroupByType={setGroupByType}
             editingHabitId={editingHabitId}
             editHabitName={editHabitName}
             editHabitCategory={editHabitCategory}
             editHabitReminder={editHabitReminder}
+            editHabitReminderEnabled={editHabitReminderEnabled}
             onEditHabitName={setEditHabitName}
             onEditHabitCategory={setEditHabitCategory}
             onEditHabitReminder={setEditHabitReminder}
+            onEditHabitReminderEnabled={setEditHabitReminderEnabled}
             onSaveEditedHabit={saveEditedHabit}
             onCancelEditHabit={cancelEditHabit}
             onStartEditHabit={startEditHabit}
@@ -831,227 +901,344 @@ export default function App() {
 
         {activeTab === 'progress' && (
           <View style={styles.tabBody}>
-            <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
-              <Text style={[styles.sectionTitle, { color: palette.text }]}>Statistics</Text>
-              <View style={styles.statsGrid}>
-                <View style={[styles.statCard, { backgroundColor: palette.bg }]}> 
-                  <Text style={[styles.statLabel, { color: palette.muted }]}>Completion</Text>
-                  <Text style={[styles.statValue, { color: palette.text }]}>{todayProgress}%</Text>
-                </View>
-                <View style={[styles.statCard, { backgroundColor: palette.bg }]}> 
-                  <Text style={[styles.statLabel, { color: palette.muted }]}>Best Streak</Text>
-                  <Text style={[styles.statValue, { color: palette.text }]}>{bestStreak}d</Text>
-                </View>
-                <View style={[styles.statCard, { backgroundColor: palette.bg }]}> 
-                  <Text style={[styles.statLabel, { color: palette.muted }]}>Total Habits</Text>
-                  <Text style={[styles.statValue, { color: palette.text }]}>{activeHabits.length}</Text>
-                </View>
-                <View style={[styles.statCard, { backgroundColor: palette.bg }]}> 
-                  <Text style={[styles.statLabel, { color: palette.muted }]}>Archived</Text>
-                  <Text style={[styles.statValue, { color: palette.text }]}>{archivedCount}</Text>
-                </View>
-              </View>
-              <Text style={[styles.habitInfo, { color: palette.muted }]}>Active Days: {completionDays}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+              <Text style={[styles.sectionTitle, { color: palette.text }]}>Stats</Text>
+              <Pressable
+                onPress={() => setStatsReorderMode((prev) => !prev)}
+                style={[
+                  styles.slimCheckButton,
+                  {
+                    backgroundColor: statsReorderMode ? palette.accent : palette.bg,
+                    borderColor: palette.border,
+                  },
+                ]}
+              >
+                <Text style={{ color: statsReorderMode ? '#fff' : palette.text, fontWeight: '700' }}>
+                  {statsReorderMode ? 'Done' : 'Reorder'}
+                </Text>
+              </Pressable>
             </View>
 
-            <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 
-              <Text style={[styles.sectionTitle, { color: palette.text }]}>Weekly Completion</Text>
-              {weekProgress.map((bar, index) => (
-                <View key={`${bar.label}-${index}`} style={styles.progressRow}>
-                  <Text style={[styles.progressLabel, { color: palette.muted }]}>{bar.label}</Text>
-                  <View style={[styles.barTrack, { backgroundColor: palette.bg }]}>
-                    <View
-                      style={[
-                        styles.barFill,
-                        {
-                          width: `${bar.value}%`,
-                          backgroundColor: palette.accent,
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={[styles.progressLabel, { color: palette.text }]}>{bar.value}%</Text>
-                </View>
-              ))}
-            </View>
-
-            <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 
-              <Text style={[styles.sectionTitle, { color: palette.text }]}>Progress Over Time</Text>
-              <View style={[styles.graphFrame, { backgroundColor: palette.bg, borderColor: palette.border }]}> 
-                <View style={styles.lineChartArea}>
-                  {trendSegments.map((segment) => (
-                    <View
-                      key={segment.key}
-                      style={[
-                        styles.lineSegment,
-                        {
-                          width: segment.length,
-                          left: segment.x,
-                          top: segment.y,
-                          backgroundColor: palette.accent,
-                          transform: [{ rotate: `${segment.angle}deg` }],
-                        },
-                      ]}
-                    />
-                  ))}
-                  {trendPoints.map((point, index) => (
-                    <View
-                      key={`${point.label}-${index}`}
-                      style={[
-                        styles.linePoint,
-                        {
-                          left: point.x - 3,
-                          top: point.y - 3,
-                          backgroundColor: palette.accent,
-                        },
-                      ]}
-                    />
-                  ))}
-                </View>
-                <View style={styles.graphAxisRow}>
-                  <Text style={[styles.graphAxisText, { color: palette.muted }]}>{progressTrendData[0]?.label ?? '0'}</Text>
-                  <Text style={[styles.graphAxisText, { color: palette.muted }]}>{progressTrendData[Math.floor(progressTrendData.length / 2)]?.label ?? '15'}</Text>
-                  <Text style={[styles.graphAxisText, { color: palette.muted }]}>{progressTrendData[progressTrendData.length - 1]?.label ?? '30'}</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 
-              <Text style={[styles.sectionTitle, { color: palette.text }]}>Habit Completion</Text>
-              <View style={[styles.graphFrame, { backgroundColor: palette.bg, borderColor: palette.border }]}> 
-                <View style={styles.habitBarsRow}>
-                  {habitCompletionGraph.length === 0 ? (
-                    <Text style={[styles.habitInfo, { color: palette.muted }]}>No active habits yet.</Text>
-                  ) : (
-                    habitCompletionGraph.map((bar) => (
-                      <View key={bar.id} style={styles.habitBarColumn}>
-                        <View style={[styles.habitBarFill, { height: `${bar.value}%`, backgroundColor: bar.color }]} />
-                      </View>
-                    ))
-                  )}
-                </View>
-              </View>
-            </View>
-
-            <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 
-              <Text style={[styles.sectionTitle, { color: palette.text }]}>Calendar</Text>
-              <Text style={[styles.habitInfo, { color: palette.muted }]}>{monthCalendar.monthLabel}</Text>
-              <View style={styles.weekdayHeader}>
-                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, index) => (
-                  <Text key={`${label}-${index}`} style={[styles.weekdayLabel, { color: palette.muted }]}>
-                    {label}
-                  </Text>
-                ))}
-              </View>
-              <View style={styles.calendarGrid}>
-                {monthCalendar.cells.map((cell) => {
-                  if (cell.isEmpty) {
-                    return <View key={cell.key} style={[styles.calendarCell, { opacity: 0 }]} />;
-                  }
-
-                  const selected = selectedCalendarDateKey === cell.key;
-                  return (
-                    <Pressable
-                      key={cell.key}
-                      onPress={() => setSelectedCalendarDateKey(cell.key)}
-                      style={[
-                        styles.calendarCell,
-                        {
-                          backgroundColor: cell.isToday ? palette.accent : palette.bg,
-                        },
-                        selected
-                          ? {
-                              borderWidth: 1,
-                              borderColor: palette.accent,
-                            }
-                          : null,
-                      ]}
-                    >
-                      <Text
+            {statsReorderMode ? (
+              <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
+                <Text style={[styles.habitInfo, { color: palette.muted }]}>Long-press the handle to drag and reorder sections.</Text>
+                <DraggableFlatList
+                  data={statsOrder}
+                  keyExtractor={(item) => item}
+                  renderItem={({ item, drag, isActive }: RenderItemParams<StatsSectionId>) => (
+                    <ScaleDecorator>
+                      <View
                         style={{
-                          color: cell.isToday ? '#fff' : palette.text,
-                          fontWeight: '700',
-                          fontSize: 12,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 10,
+                          paddingVertical: 10,
+                          borderBottomWidth: 1,
+                          borderBottomColor: palette.border,
+                          opacity: isActive ? 0.85 : 1,
                         }}
                       >
-                        {cell.label}
-                      </Text>
-                      <View style={[styles.calendarCompletionTrack, { backgroundColor: palette.border }]}> 
-                        <View
-                          style={[
-                            styles.calendarCompletionFill,
-                            {
-                              width: `${cell.completion}%`,
-                              backgroundColor: cell.isToday ? '#fff' : palette.accent,
-                            },
-                          ]}
-                        />
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              {selectedCalendarProgress ? (
-                <View style={[styles.calendarDetailCard, { backgroundColor: palette.bg, borderColor: palette.border }]}> 
-                  <View style={styles.calendarDetailHeader}>
-                    <Text style={[styles.calendarDetailDate, { color: palette.text }]}>{selectedCalendarProgress.dateLabel}</Text>
-                    <Text style={[styles.reminderTime, { color: palette.accent }]}>
-                      {selectedCalendarProgress.completion}%
-                    </Text>
-                  </View>
-                  <Text style={[styles.calendarDetailSummary, { color: palette.muted }]}>
-                    {selectedCalendarProgress.completed} of {selectedCalendarProgress.total} habits completed
-                  </Text>
-                  <View style={styles.calendarDetailList}>
-                    {selectedCalendarProgress.items.map((item) => (
-                      <View key={item.id} style={styles.calendarDetailItem}>
-                        <Text
-                          style={[
-                            styles.calendarDetailHabitName,
-                            {
-                              color: item.done ? palette.text : palette.muted,
-                              fontWeight: item.done ? '700' : '600',
-                            },
-                          ]}
+                        <Pressable
+                          onLongPress={drag}
+                          delayLongPress={120}
+                          style={{ paddingHorizontal: 4 }}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Drag to reorder ${item}`}
                         >
-                          {item.name}
+                          <Ionicons name="menu" size={18} color={palette.muted} />
+                        </Pressable>
+                        <Text style={{ color: palette.text, fontWeight: '700', flex: 1 }}>
+                          {item === 'statistics' ? '📊 Statistics'
+                            : item === 'weekly' ? '📅 Weekly Completion'
+                            : item === 'trend' ? '📈 Progress Over Time'
+                            : item === 'habits-graph' ? '📉 Habit Completion'
+                            : item === 'per-habit' ? '🔍 Per-Habit Details'
+                            : item === 'calendar' ? '🗓️ Calendar'
+                            : item === 'reminders' ? '🔔 Reminders'
+                            : item}
                         </Text>
-                        {item.isBinary && item.done ? (
-                          <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
-                        ) : (
-                          <Text
+                      </View>
+                    </ScaleDecorator>
+                  )}
+                  onDragEnd={({ data }) => setStatsOrder(data)}
+                  scrollEnabled={false}
+                  nestedScrollEnabled={false}
+                  activationDistance={8}
+                />
+              </View>
+            ) : (
+              statsOrder.map((sectionId) => {
+                if (sectionId === 'statistics') {
+                  return (
+                    <View key="statistics" style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
+                      <Text style={[styles.sectionTitle, { color: palette.text }]}>Statistics</Text>
+                      <View style={styles.statsGrid}>
+                        <View style={[styles.statCard, { backgroundColor: palette.bg }]}>
+                          <Text style={[styles.statLabel, { color: palette.muted }]}>Completion</Text>
+                          <Text style={[styles.statValue, { color: palette.text }]}>{todayProgress}%</Text>
+                        </View>
+                        <View style={[styles.statCard, { backgroundColor: palette.bg }]}>
+                          <Text style={[styles.statLabel, { color: palette.muted }]}>Best Streak</Text>
+                          <Text style={[styles.statValue, { color: palette.text }]}>{bestStreak}d</Text>
+                        </View>
+                        <View style={[styles.statCard, { backgroundColor: palette.bg }]}>
+                          <Text style={[styles.statLabel, { color: palette.muted }]}>Total Habits</Text>
+                          <Text style={[styles.statValue, { color: palette.text }]}>{activeHabits.length}</Text>
+                        </View>
+                        <View style={[styles.statCard, { backgroundColor: palette.bg }]}>
+                          <Text style={[styles.statLabel, { color: palette.muted }]}>Archived</Text>
+                          <Text style={[styles.statValue, { color: palette.text }]}>{archivedCount}</Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.habitInfo, { color: palette.muted }]}>Active Days: {completionDays}</Text>
+                    </View>
+                  );
+                }
+                if (sectionId === 'weekly') {
+                  return (
+                    <View key="weekly" style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
+                      <Text style={[styles.sectionTitle, { color: palette.text }]}>Weekly Completion</Text>
+                      {weekProgress.map((bar, index) => (
+                        <View key={`${bar.label}-${index}`} style={styles.progressRow}>
+                          <Text style={[styles.progressLabel, { color: palette.muted }]}>{bar.label}</Text>
+                          <View style={[styles.barTrack, { backgroundColor: palette.bg }]}>
+                            <View style={[styles.barFill, { width: `${bar.value}%`, backgroundColor: palette.accent }]} />
+                          </View>
+                          <Text style={[styles.progressLabel, { color: palette.text }]}>{bar.value}%</Text>
+                        </View>
+                      ))}
+                    </View>
+                  );
+                }
+                if (sectionId === 'trend') {
+                  return (
+                    <View key="trend" style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
+                      <Text style={[styles.sectionTitle, { color: palette.text }]}>Progress Over Time</Text>
+                      <View style={[styles.graphFrame, { backgroundColor: palette.bg, borderColor: palette.border }]}>
+                        <View style={styles.lineChartArea}>
+                          {trendSegments.map((segment) => (
+                            <View
+                              key={segment.key}
+                              style={[
+                                styles.lineSegment,
+                                {
+                                  width: segment.length,
+                                  left: segment.x,
+                                  top: segment.y,
+                                  backgroundColor: palette.accent,
+                                  transform: [{ rotate: `${segment.angle}deg` }],
+                                },
+                              ]}
+                            />
+                          ))}
+                          {trendPoints.map((point, index) => (
+                            <View
+                              key={`${point.label}-${index}`}
+                              style={[styles.linePoint, { left: point.x - 3, top: point.y - 3, backgroundColor: palette.accent }]}
+                            />
+                          ))}
+                        </View>
+                        <View style={styles.graphAxisRow}>
+                          <Text style={[styles.graphAxisText, { color: palette.muted }]}>{progressTrendData[0]?.label ?? '0'}</Text>
+                          <Text style={[styles.graphAxisText, { color: palette.muted }]}>{progressTrendData[Math.floor(progressTrendData.length / 2)]?.label ?? '15'}</Text>
+                          <Text style={[styles.graphAxisText, { color: palette.muted }]}>{progressTrendData[progressTrendData.length - 1]?.label ?? '30'}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                }
+                if (sectionId === 'habits-graph') {
+                  return (
+                    <View key="habits-graph" style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
+                      <Text style={[styles.sectionTitle, { color: palette.text }]}>Habit Completion</Text>
+                      <View style={[styles.graphFrame, { backgroundColor: palette.bg, borderColor: palette.border }]}>
+                        <View style={styles.habitBarsRow}>
+                          {habitCompletionGraph.length === 0 ? (
+                            <Text style={[styles.habitInfo, { color: palette.muted }]}>No active habits yet.</Text>
+                          ) : (
+                            habitCompletionGraph.map((bar) => (
+                              <View key={bar.id} style={styles.habitBarColumn}>
+                                <View style={[styles.habitBarFill, { height: `${bar.value}%`, backgroundColor: bar.color }]} />
+                              </View>
+                            ))
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                  );
+                }
+                if (sectionId === 'per-habit') {
+                  return (
+                    <View key="per-habit" style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
+                      <Text style={[styles.sectionTitle, { color: palette.text }]}>Per-Habit Details</Text>
+                      <Text style={[styles.habitInfo, { color: palette.muted }]}>30-day completion rate, current streak, and total completions.</Text>
+                      {perHabitStats.length === 0 ? (
+                        <Text style={[styles.habitInfo, { color: palette.muted }]}>No active habits yet.</Text>
+                      ) : (
+                        perHabitStats.map((stat) => (
+                          <View
+                            key={stat.id}
                             style={{
-                              color: item.done ? '#22c55e' : palette.muted,
-                              fontSize: 11,
-                              fontWeight: '400',
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              paddingVertical: 8,
+                              borderBottomWidth: 1,
+                              borderBottomColor: palette.border,
+                              gap: 8,
                             }}
                           >
-                            {item.detail}
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                              <Text style={[styles.habitName, { color: palette.text }]} numberOfLines={1}>{stat.name}</Text>
+                              <Text style={[styles.habitInfo, { color: palette.muted }]}>
+                                {stat.taskType === 'measurable' ? '📏' : '✅'} {stat.totalCompletions} total · {stat.streak}d streak
+                              </Text>
+                            </View>
+                            <View
+                              style={{
+                                alignItems: 'center',
+                                backgroundColor: palette.bg,
+                                borderRadius: 10,
+                                paddingHorizontal: 8,
+                                paddingVertical: 6,
+                                minWidth: 52,
+                              }}
+                            >
+                              <Text style={{ color: palette.accent, fontWeight: '800', fontSize: 16 }}>{stat.rate30d}%</Text>
+                              <Text style={{ color: palette.muted, fontSize: 10, fontWeight: '600' }}>30d</Text>
+                            </View>
+                          </View>
+                        ))
+                      )}
+                    </View>
+                  );
+                }
+                if (sectionId === 'calendar') {
+                  return (
+                    <View key="calendar" style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
+                      <Text style={[styles.sectionTitle, { color: palette.text }]}>Calendar</Text>
+                      <Text style={[styles.habitInfo, { color: palette.muted }]}>{monthCalendar.monthLabel}</Text>
+                      <View style={styles.weekdayHeader}>
+                        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, index) => (
+                          <Text key={`${label}-${index}`} style={[styles.weekdayLabel, { color: palette.muted }]}>
+                            {label}
                           </Text>
-                        )}
+                        ))}
                       </View>
-                    ))}
-                  </View>
-                </View>
-              ) : (
-                <Text style={[styles.habitInfo, { color: palette.muted, marginTop: 10 }]}>Tap a date to view that day's progress.</Text>
-              )}
-            </View>
-
-            <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 
-              <Text style={[styles.sectionTitle, { color: palette.text }]}>Reminders</Text>
-              {reminderHabits.length === 0 ? (
-                <Text style={[styles.habitInfo, { color: palette.muted }]}>No reminders enabled yet.</Text>
-              ) : (
-                reminderHabits.map((habit) => (
-                  <View key={habit.id} style={[styles.reminderRow, { borderBottomColor: palette.border }]}> 
-                    <Text style={[styles.habitName, { color: palette.text }]}>{habit.name}</Text>
-                    <Text style={[styles.reminderTime, { color: palette.accent }]}>{habit.reminderTime}</Text>
-                  </View>
-                ))
-              )}
-            </View>
-
+                      <View style={styles.calendarGrid}>
+                        {monthCalendar.cells.map((cell) => {
+                          if (cell.isEmpty) {
+                            return <View key={cell.key} style={[styles.calendarCell, { opacity: 0 }]} />;
+                          }
+                          const selected = selectedCalendarDateKey === cell.key;
+                          return (
+                            <Pressable
+                              key={cell.key}
+                              onPress={() => setSelectedCalendarDateKey(cell.key)}
+                              style={[
+                                styles.calendarCell,
+                                { backgroundColor: cell.isToday ? palette.accent : palette.bg },
+                                selected ? { borderWidth: 1, borderColor: palette.accent } : null,
+                              ]}
+                            >
+                              <Text style={{ color: cell.isToday ? '#fff' : palette.text, fontWeight: '700', fontSize: 12 }}>
+                                {cell.label}
+                              </Text>
+                              <View style={[styles.calendarCompletionTrack, { backgroundColor: palette.border }]}>
+                                <View
+                                  style={[
+                                    styles.calendarCompletionFill,
+                                    { width: `${cell.completion}%`, backgroundColor: cell.isToday ? '#fff' : palette.accent },
+                                  ]}
+                                />
+                              </View>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      {selectedCalendarProgress ? (
+                        <View style={[styles.calendarDetailCard, { backgroundColor: palette.bg, borderColor: palette.border }]}>
+                          <View style={styles.calendarDetailHeader}>
+                            <Text style={[styles.calendarDetailDate, { color: palette.text }]}>{selectedCalendarProgress.dateLabel}</Text>
+                            <Text style={[styles.reminderTime, { color: palette.accent }]}>{selectedCalendarProgress.completion}%</Text>
+                          </View>
+                          <Text style={[styles.calendarDetailSummary, { color: palette.muted }]}>
+                            {selectedCalendarProgress.completed} of {selectedCalendarProgress.total} habits completed
+                          </Text>
+                          <View style={styles.calendarDetailList}>
+                            {selectedCalendarProgress.items.map((item) => (
+                              <View key={item.id} style={styles.calendarDetailItem}>
+                                <Text
+                                  style={[
+                                    styles.calendarDetailHabitName,
+                                    { color: item.done ? palette.text : palette.muted, fontWeight: item.done ? '700' : '600' },
+                                  ]}
+                                >
+                                  {item.name}
+                                </Text>
+                                {item.isBinary && item.done ? (
+                                  <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
+                                ) : (
+                                  <Text style={{ color: item.done ? '#22c55e' : palette.muted, fontSize: 11, fontWeight: '400' }}>
+                                    {item.detail}
+                                  </Text>
+                                )}
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      ) : (
+                        <Text style={[styles.habitInfo, { color: palette.muted, marginTop: 10 }]}>Tap a date to view that day's progress.</Text>
+                      )}
+                    </View>
+                  );
+                }
+                if (sectionId === 'reminders') {
+                  return (
+                    <View key="reminders" style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
+                      <Text style={[styles.sectionTitle, { color: palette.text }]}>Reminders</Text>
+                      {reminderHabits.length === 0 ? (
+                        <Text style={[styles.habitInfo, { color: palette.muted }]}>No reminders enabled yet.</Text>
+                      ) : (
+                        reminderHabits.map((habit) => (
+                          <View key={habit.id} style={[styles.reminderRow, { borderBottomColor: palette.border }]}>
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                              <Text style={[styles.habitName, { color: habit.reminderMuted ? palette.muted : palette.text }]} numberOfLines={1}>
+                                {habit.name}
+                              </Text>
+                              {habit.reminderMuted ? (
+                                <Text style={{ color: palette.muted, fontSize: 11 }}>Muted</Text>
+                              ) : null}
+                            </View>
+                            <Text style={[styles.reminderTime, { color: habit.reminderMuted ? palette.muted : palette.accent }]}>
+                              {habit.reminderTime}
+                            </Text>
+                            <Pressable
+                              onPress={() => muteReminder(habit.id)}
+                              style={{
+                                borderWidth: 1,
+                                borderColor: habit.reminderMuted ? palette.accent : palette.border,
+                                borderRadius: 8,
+                                paddingHorizontal: 8,
+                                paddingVertical: 4,
+                                backgroundColor: habit.reminderMuted ? palette.accent : palette.bg,
+                                marginLeft: 8,
+                              }}
+                              accessibilityRole="button"
+                              accessibilityLabel={habit.reminderMuted ? `Unmute ${habit.name}` : `Mute ${habit.name}`}
+                            >
+                              <Text style={{ color: habit.reminderMuted ? '#fff' : palette.muted, fontWeight: '700', fontSize: 11 }}>
+                                {habit.reminderMuted ? 'Unmute' : 'Mute'}
+                              </Text>
+                            </Pressable>
+                          </View>
+                        ))
+                      )}
+                    </View>
+                  );
+                }
+                return null;
+              })
+            )}
           </View>
         )}
 
