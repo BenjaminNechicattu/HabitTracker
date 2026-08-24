@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Image, Modal, Pressable, Text, TextInput, View } from 'react-native';
-import { ThemeColor } from '../types/habit';
 
 type Palette = {
   bg: string;
@@ -21,26 +20,13 @@ type ProfileTabProps = {
   selectedAvatar: string;
   profileAvatarImageUri?: string;
   themeMode: 'system' | 'light' | 'dark' | 'amoled';
-  themeColor: ThemeColor;
   onChangeName: (value: string) => void;
   onSelectAvatar: (value: string) => void;
   onSetProfileAvatarImageUri: (value: string) => void;
   onSetThemeMode: (value: 'system' | 'light' | 'dark' | 'amoled') => void;
-  onSetThemeColor: (value: ThemeColor) => void;
   onClearAllData: () => void | Promise<void>;
   onSaveProfile: () => void;
 };
-
-const THEME_COLOR_OPTIONS: { key: ThemeColor; label: string; color: string }[] = [
-  { key: 'violet', label: 'Violet', color: '#7e66ff' },
-  { key: 'blue', label: 'Blue', color: '#2563eb' },
-  { key: 'teal', label: 'Teal', color: '#15b2ae' },
-  { key: 'forest', label: 'Green', color: '#2f8f4e' },
-  { key: 'sunset', label: 'Orange', color: '#ef863f' },
-  { key: 'rose', label: 'Pink', color: '#dc5d92' },
-  { key: 'red', label: 'Red', color: '#dc2626' },
-  { key: 'gray', label: 'Gray', color: '#7f8791' },
-];
 
 const AVATAR_OPTIONS = [
   'person-circle-outline',
@@ -65,12 +51,10 @@ export function ProfileTab({
   selectedAvatar,
   profileAvatarImageUri,
   themeMode,
-  themeColor,
   onChangeName,
   onSelectAvatar,
   onSetProfileAvatarImageUri,
   onSetThemeMode,
-  onSetThemeColor,
   onClearAllData,
   onSaveProfile,
 }: ProfileTabProps) {
@@ -104,7 +88,7 @@ export function ProfileTab({
         <Text style={[styles.sectionTitle, { color: palette.text }]}>Profile</Text>
         <Text style={[styles.habitInfo, { color: palette.muted }]}>Edit your display name and avatar.</Text>
 
-        <View style={[styles.profileAvatarPreview, { backgroundColor: isDarkTheme ? '#171717' : '#f4efff', overflow: 'hidden' }]}> 
+        <View style={[styles.profileAvatarPreview, { backgroundColor: isDarkTheme ? '#171717' : '#edf9f1', overflow: 'hidden' }]}> 
           {profileAvatarImageUri ? (
             <Image source={{ uri: profileAvatarImageUri }} style={{ width: '100%', height: '100%' }} />
           ) : (
@@ -155,7 +139,7 @@ export function ProfileTab({
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            backgroundColor: isDarkTheme ? '#171717' : '#f8f5ff',
+            backgroundColor: isDarkTheme ? '#171717' : '#f1faf4',
           }}
         >
           <Text style={{ color: palette.text, fontWeight: '700' }}>Choose avatar</Text>
@@ -173,7 +157,7 @@ export function ProfileTab({
                   style={[
                     styles.profileAvatarChip,
                     {
-                      backgroundColor: active ? palette.accent : isDarkTheme ? '#171717' : '#f4efff',
+                      backgroundColor: active ? palette.accent : isDarkTheme ? '#171717' : '#edf9f1',
                       borderColor: palette.border,
                     },
                   ]}
@@ -253,31 +237,6 @@ export function ProfileTab({
           </Pressable>
         </View>
 
-        <Text style={[styles.habitInfo, { color: palette.muted, marginTop: 8 }]}>Theme palette</Text>
-        <View style={styles.profileAvatarGrid}>
-          {THEME_COLOR_OPTIONS.map((option) => {
-            const active = option.key === themeColor;
-            return (
-              <Pressable
-                key={option.key}
-                onPress={() => onSetThemeColor(option.key)}
-                accessibilityRole="button"
-                accessibilityLabel={`Set ${option.label} theme color`}
-                style={[
-                  styles.profileAvatarChip,
-                  {
-                    backgroundColor: option.color,
-                    borderColor: active ? '#ffffff' : palette.border,
-                    borderWidth: active ? 3 : 1,
-                    width: 42,
-                    height: 42,
-                    borderRadius: 21,
-                  },
-                ]}
-              />
-            );
-          })}
-        </View>
       </View>
 
       <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 

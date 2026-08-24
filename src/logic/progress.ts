@@ -1,10 +1,24 @@
 import { eachDayOfInterval, endOfMonth, format, getDay, startOfMonth, subDays } from 'date-fns';
 import { CheckInMap, Habit } from '../types/habit';
 
-function isHabitCompleteForDay(habit: Habit, dayEntries: Record<string, number>) {
+export function getHabitOptionKey(habitId: string, optionId: string): string {
+  return `${habitId}::${optionId}`;
+}
+
+export function isHabitCompleteForDay(habit: Habit, dayEntries: Record<string, number>) {
   const value = dayEntries[habit.id] ?? 0;
-  if (habit.taskType === 'measurable') {
+  if (habit.taskType === 'choice') {
+    if (value > 0) {
+      return true;
+    }
+    const options = habit.choiceOptions ?? [];
+    return options.some((option) => Boolean(dayEntries[getHabitOptionKey(habit.id, option.id)]));
+  }
+  if (habit.taskType === 'target' || habit.taskType === 'measurable') {
     return value >= (habit.targetValue ?? 1);
+  }
+  if (habit.taskType === 'tracker') {
+    return value > 0;
   }
   return value > 0;
 }

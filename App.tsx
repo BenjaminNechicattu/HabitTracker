@@ -6,6 +6,7 @@ import { addDays, format, subDays } from 'date-fns';
 import {
   PanResponder,
   Platform,
+  Image,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -26,11 +27,13 @@ import {
   countGlobalStreak,
   countLongestGlobalStreak,
   getDateKey,
+  getHabitOptionKey,
+  isHabitCompleteForDay,
 } from './src/logic/progress';
 import { syncHabitReminders } from './src/notifications/reminders';
 import { clearPersistedState, loadPersistedState, savePersistedState } from './src/storage/persistence';
 import { buildPalette } from './src/theme/palette';
-import { CheckInMap, Habit, HabitTemplate, PersistedState, STATS_SECTION_IDS, StatsSectionId, TabKey, ThemeColor } from './src/types/habit';
+import { CheckInMap, Habit, HabitTemplate, PersistedState, STATS_SECTION_IDS, StatsSectionId, TabKey } from './src/types/habit';
 import { AddHabitTab } from './src/components/AddHabitTab';
 import { DashboardTab } from './src/components/DashboardTab';
 import { HabitsTab } from './src/components/HabitsTab';
@@ -39,11 +42,20 @@ import { addWidgetUserInteractionListener, HabitTasksWidget } from './src/widget
 
 const TAB_SWIPE_ORDER: TabKey[] = ['dashboard', 'habits', 'add', 'progress', 'profile'];
 
+type HabitChoiceFormItem = {
+  id: string;
+  name: string;
+  taskType: 'check' | 'target' | 'tracker';
+  targetValue: string;
+  measurableUnit: string;
+};
+
+const TASK_COLOR_OPTIONS = ['#22c55e', '#6653ff', '#f97316', '#ef4444', '#0ea5e9', '#ec4899', '#14b8a6', '#facc15'];
+
 export default function App() {
   const [habits, setHabits] = useState<Habit[]>(INITIAL_HABITS);
   const [checkIns, setCheckIns] = useState<CheckInMap>({});
   const [themeMode, setThemeMode] = useState<'system' | 'light' | 'dark' | 'amoled'>('system');
-  const [themeColor, setThemeColor] = useState<ThemeColor>('violet');
   const [activeTab, setActiveTab] = useState<TabKey>('dashboard');
   const [onboarded, setOnboarded] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -52,10 +64,17 @@ export default function App() {
 
   const [newHabitName, setNewHabitName] = useState('');
   const [newHabitCategory, setNewHabitCategory] = useState('Health');
-  const [newHabitFrequency, setNewHabitFrequency] = useState<'daily' | 'weekly'>('daily');
-  const [newHabitTaskType, setNewHabitTaskType] = useState<'yesNo' | 'measurable'>('yesNo');
+  const [newHabitFrequency, setNewHabitFrequency] = useState<'daily'>('daily');
+  const [newHabitTaskType, setNewHabitTaskType] = useState<'yesNo' | 'target' | 'tracker' | 'choice' | 'measurable'>('yesNo');
   const [newHabitTargetValue, setNewHabitTargetValue] = useState('');
   const [newHabitUnit, setNewHabitUnit] = useState('');
+  const [newHabitTaskColor, setNewHabitTaskColor] = useState('#22c55e');
+  const [newHabitChoiceOptions, setNewHabitChoiceOptions] = useState<HabitChoiceFormItem[]>([
+    { id: 'option-1', name: 'Walk 30 minutes', taskType: 'check', targetValue: '30', measurableUnit: 'min' },
+    { id: 'option-2', name: 'Cycle 20 minutes', taskType: 'check', targetValue: '20', measurableUnit: 'min' },
+    { id: 'option-3', name: 'Go to the gym', taskType: 'check', targetValue: '1', measurableUnit: 'session' },
+  ]);
+  const [newHabitRandomSuggestionEnabled, setNewHabitRandomSuggestionEnabled] = useState(true);
   const [newHabitReminderEnabled, setNewHabitReminderEnabled] = useState(true);
   const [newHabitReminder, setNewHabitReminder] = useState('07:00');
   const [newHabitRepeatDays, setNewHabitRepeatDays] = useState<number[]>([1, 2, 3, 4, 5]);
@@ -63,6 +82,7 @@ export default function App() {
   const [editingHabitId, setEditingHabitId] = useState<string | null>(null);
   const [editHabitName, setEditHabitName] = useState('');
   const [editHabitCategory, setEditHabitCategory] = useState('');
+  const [editHabitTaskColor, setEditHabitTaskColor] = useState('#22c55e');
   const [editHabitReminder, setEditHabitReminder] = useState('07:00');
   const [editHabitReminderEnabled, setEditHabitReminderEnabled] = useState(true);
   const [formError, setFormError] = useState('');
@@ -80,9 +100,13 @@ export default function App() {
   const [statsReorderMode, setStatsReorderMode] = useState(false);
   const [newHabitReminderExpanded, setNewHabitReminderExpanded] = useState(true);
   const [showReminderList, setShowReminderList] = useState(true);
+  const [editHabitChoiceOptions, setEditHabitChoiceOptions] = useState<HabitChoiceFormItem[]>([]);
+  const [editHabitRandomSuggestionEnabled, setEditHabitRandomSuggestionEnabled] = useState(true);
 
   const todayKey = getDateKey(new Date());
   const todayCompletions = checkIns[todayKey] ?? {};
+  const isTargetHabit = (habit: Habit) => habit.taskType === 'target' || habit.taskType === 'measurable';
+  const isTrackerHabit = (habit: Habit) => habit.taskType === 'tracker';
 
   useEffect(() => {
     let cancelled = false;
@@ -96,7 +120,6 @@ export default function App() {
       setHabits(state.habits);
       setCheckIns(state.checkIns);
       setThemeMode(state.themeMode);
-      setThemeColor(state.themeColor);
       setOnboarded(state.onboarded);
       setProfileName(state.profileName);
       setProfileAvatar(state.profileAvatar);
@@ -135,7 +158,6 @@ export default function App() {
       habits,
       checkIns,
       themeMode,
-      themeColor,
       onboarded,
       profileName,
       profileAvatar,
@@ -147,7 +169,7 @@ export default function App() {
     savePersistedState(payload).catch(() => {
       // Keep UI responsive if persistence fails.
     });
-  }, [habits, checkIns, themeMode, themeColor, onboarded, profileName, profileAvatar, profileAvatarImageUri, statsOrder, newHabitReminderExpanded, hydrated]);
+  }, [habits, checkIns, themeMode, onboarded, profileName, profileAvatar, profileAvatarImageUri, statsOrder, newHabitReminderExpanded, hydrated]);
 
   const activeHabits = useMemo(() => habits.filter((habit) => !habit.archived), [habits]);
 
@@ -176,13 +198,7 @@ export default function App() {
   }, [activeHabits, hydrated]);
 
   const completedToday = useMemo(() => {
-    return activeHabits.filter((habit) => {
-      const value = todayCompletions[habit.id] ?? 0;
-      if (habit.taskType === 'measurable') {
-        return value >= (habit.targetValue ?? 1);
-      }
-      return value > 0;
-    }).length;
+    return activeHabits.filter((habit) => isHabitCompleteForDay(habit, todayCompletions)).length;
   }, [activeHabits, todayCompletions]);
 
   const todayProgress = activeHabits.length === 0 ? 0 : Math.round((completedToday / activeHabits.length) * 100);
@@ -190,33 +206,48 @@ export default function App() {
   const bestStreak = countLongestGlobalStreak(checkIns);
   const weekProgress = buildWeekProgress(checkIns, activeHabits);
   const monthCalendar = buildCurrentMonthCalendar(checkIns, activeHabits);
+  const dailyChoiceSuggestion = useMemo(() => {
+    const eligibleHabits = activeHabits.filter(
+      (habit) => habit.taskType === 'choice' && habit.randomSuggestionEnabled && (habit.choiceOptions?.length ?? 0) > 0,
+    );
+
+    if (eligibleHabits.length === 0) {
+      return null;
+    }
+
+    const hashSeed = Array.from(todayKey).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    const habitIndex = hashSeed % eligibleHabits.length;
+    const habit = eligibleHabits[habitIndex];
+    const options = habit.choiceOptions ?? [];
+    const optionIndex = (hashSeed + habit.name.length) % options.length;
+    return `${habit.name}: ${options[optionIndex]?.name ?? 'Complete it'}`;
+  }, [activeHabits, todayKey]);
   const selectedCalendarProgress = useMemo(() => {
     if (!selectedCalendarDateKey) {
       return null;
     }
 
     const dayEntries = checkIns[selectedCalendarDateKey] ?? {};
-    const completed = activeHabits.filter((habit) => {
-      const value = dayEntries[habit.id] ?? 0;
-      return habit.taskType === 'measurable' ? value >= (habit.targetValue ?? 1) : value > 0;
-    }).length;
+    const completed = activeHabits.filter((habit) => isHabitCompleteForDay(habit, dayEntries)).length;
 
     const items = activeHabits.map((habit) => {
       const value = dayEntries[habit.id] ?? 0;
-      const done = habit.taskType === 'measurable' ? value >= (habit.targetValue ?? 1) : value > 0;
+      const done = isHabitCompleteForDay(habit, dayEntries);
       const detail =
-        habit.taskType === 'measurable'
+        isTargetHabit(habit)
           ? `${value}/${habit.targetValue ?? 1} ${habit.measurableUnit ?? 'units'}`
-          : done
-            ? 'Completed'
-            : 'Not completed';
+          : habit.taskType === 'tracker'
+            ? `${value} ${habit.measurableUnit ?? 'units'} logged`
+            : done
+              ? 'Completed'
+              : 'Not completed';
 
       return {
         id: habit.id,
         name: habit.name,
         done,
         value,
-        isBinary: habit.taskType !== 'measurable',
+        isBinary: !isTargetHabit(habit) && habit.taskType !== 'tracker',
         detail,
       };
     });
@@ -239,10 +270,7 @@ export default function App() {
       const date = subDays(new Date(), (10 - index) * 3);
       const key = getDateKey(date);
       const dayEntries = checkIns[key] ?? {};
-      const completed = activeHabits.filter((habit) => {
-        const value = dayEntries[habit.id] ?? 0;
-        return habit.taskType === 'measurable' ? value >= (habit.targetValue ?? 1) : value > 0;
-      }).length;
+      const completed = activeHabits.filter((habit) => isHabitCompleteForDay(habit, dayEntries)).length;
       const value = activeHabits.length === 0 ? 0 : Math.round((completed / activeHabits.length) * 100);
 
       return {
@@ -261,8 +289,7 @@ export default function App() {
 
       for (let i = 0; i < lookbackDays; i += 1) {
         const dayKey = getDateKey(subDays(new Date(), i));
-        const value = checkIns[dayKey]?.[habit.id] ?? 0;
-        const done = habit.taskType === 'measurable' ? value >= (habit.targetValue ?? 1) : value > 0;
+        const done = isHabitCompleteForDay(habit, checkIns[dayKey] ?? {});
         if (done) {
           completeCount += 1;
         }
@@ -286,17 +313,14 @@ export default function App() {
       let totalCompletions = 0;
 
       for (const dayEntries of Object.values(checkIns)) {
-        const value = dayEntries[habit.id] ?? 0;
-        const done = habit.taskType === 'measurable' ? value >= (habit.targetValue ?? 1) : value > 0;
-        if (done) {
+        if (isHabitCompleteForDay(habit, dayEntries)) {
           totalCompletions += 1;
         }
       }
 
       for (let i = 0; i < lookbackDays; i += 1) {
         const dayKey = getDateKey(subDays(new Date(), i));
-        const value = checkIns[dayKey]?.[habit.id] ?? 0;
-        const done = habit.taskType === 'measurable' ? value >= (habit.targetValue ?? 1) : value > 0;
+        const done = isHabitCompleteForDay(habit, checkIns[dayKey] ?? {});
         if (done) {
           completeCount += 1;
           if (streakRunning) {
@@ -307,6 +331,32 @@ export default function App() {
         }
       }
 
+      const optionStats = (habit.choiceOptions ?? []).map((option) => {
+        let optionCount = 0;
+        for (const dayEntries of Object.values(checkIns)) {
+          if (dayEntries[getHabitOptionKey(habit.id, option.id)]) {
+            optionCount += 1;
+          }
+        }
+        return {
+          id: option.id,
+          name: option.name,
+          total: optionCount,
+        };
+      });
+
+      const trackerValues: number[] = [];
+      for (const dayEntries of Object.values(checkIns)) {
+        const value = dayEntries[habit.id] ?? 0;
+        if (value > 0 && (habit.taskType === 'tracker' || habit.taskType === 'target' || habit.taskType === 'measurable')) {
+          trackerValues.push(value);
+        }
+      }
+
+      const average = trackerValues.length > 0 ? trackerValues.reduce((sum, value) => sum + value, 0) / trackerValues.length : 0;
+      const minimum = trackerValues.length > 0 ? Math.min(...trackerValues) : 0;
+      const maximum = trackerValues.length > 0 ? Math.max(...trackerValues) : 0;
+
       return {
         id: habit.id,
         name: habit.name,
@@ -314,6 +364,10 @@ export default function App() {
         rate30d: Math.round((completeCount / lookbackDays) * 100),
         streak,
         totalCompletions,
+        optionStats,
+        average,
+        minimum,
+        maximum,
       };
     });
   }, [activeHabits, checkIns]);
@@ -323,8 +377,7 @@ export default function App() {
 
     for (const habit of activeHabits) {
       const current = categoryMap.get(habit.category) ?? { count: 0, completed: 0 };
-      const value = todayCompletions[habit.id] ?? 0;
-      const done = habit.taskType === 'measurable' ? value >= (habit.targetValue ?? 1) : value > 0;
+      const done = isHabitCompleteForDay(habit, todayCompletions);
       categoryMap.set(habit.category, {
         count: current.count + 1,
         completed: current.completed + (done ? 1 : 0),
@@ -343,7 +396,7 @@ export default function App() {
   const widgetSnapshot = useMemo(() => {
     const widgetHabits = activeHabits.slice(0, 3).map((habit) => {
       const currentValue = todayCompletions[habit.id] ?? 0;
-      const done = habit.taskType === 'measurable' ? currentValue >= (habit.targetValue ?? 1) : currentValue > 0;
+      const done = isTargetHabit(habit) ? currentValue >= (habit.targetValue ?? 1) : habit.taskType === 'tracker' ? currentValue > 0 : currentValue > 0;
 
       return {
         id: habit.id,
@@ -431,15 +484,15 @@ export default function App() {
 
   const isDarkTheme = themeMode === 'system' ? systemColorScheme === 'dark' : themeMode === 'dark' || themeMode === 'amoled';
   const isAmoled = themeMode === 'amoled';
-  const palette = buildPalette(isDarkTheme, themeColor, isAmoled);
+  const palette = buildPalette(isDarkTheme, isAmoled);
 
   const saveProfile = () => {
     const trimmedName = draftProfileName.trim();
     const nextName = trimmedName || 'Ben';
     setProfileName(nextName);
     setProfileAvatar(draftProfileAvatar || 'person-circle-outline');
-    setProfileAvatarImageUri((current) => current);
-    setToastMessage(`profile updated`);
+    setProfileAvatarImageUri(profileAvatarImageUri);
+    setToastMessage('profile updated');
   };
 
   useEffect(() => {
@@ -467,6 +520,40 @@ export default function App() {
     setOnboarded(true);
   };
 
+  const getChoiceOptionStatus = (habit: Habit, optionId: string, dateKey: string = todayKey) => {
+    return Boolean((checkIns[dateKey] ?? {})[getHabitOptionKey(habit.id, optionId)]);
+  };
+
+  const toggleChoiceOption = (habitId: string, optionId: string, dateKey: string = todayKey) => {
+    const habit = habits.find((item) => item.id === habitId);
+    if (!habit || habit.taskType !== 'choice') {
+      return;
+    }
+
+    setCheckIns((prev) => {
+      const dayMap = prev[dateKey] ?? {};
+      const nextDayMap = { ...dayMap };
+      const optionKey = getHabitOptionKey(habitId, optionId);
+      const isActive = Boolean(nextDayMap[optionKey]);
+
+      (habit.choiceOptions ?? []).forEach((option) => {
+        delete nextDayMap[getHabitOptionKey(habitId, option.id)];
+      });
+
+      if (isActive) {
+        delete nextDayMap[habitId];
+      } else {
+        nextDayMap[optionKey] = 1;
+        nextDayMap[habitId] = 1;
+      }
+
+      return {
+        ...prev,
+        [dateKey]: nextDayMap,
+      };
+    });
+  };
+
   const setHabitProgressForDate = (habitId: string, rawValue: number, dateKey: string = todayKey) => {
     const habit = habits.find((item) => item.id === habitId);
     if (!habit) {
@@ -475,16 +562,32 @@ export default function App() {
 
     const rounded = Number.isFinite(rawValue) ? Math.round(rawValue) : 0;
     const normalizedValue =
-      habit.taskType === 'measurable'
+      isTargetHabit(habit)
         ? Math.max(0, Math.min(rounded, habit.targetValue ?? 1))
-        : rounded > 0
-          ? 1
-          : 0;
+        : habit.taskType === 'tracker'
+          ? Math.max(0, rounded)
+          : habit.taskType === 'choice'
+            ? rounded > 0
+              ? 1
+              : 0
+            : rounded > 0
+              ? 1
+              : 0;
 
     setCheckIns((prev) => {
       const dayMap = prev[dateKey] ?? {};
       const nextDayMap = { ...dayMap };
-      if (normalizedValue > 0) {
+
+      if (habit.taskType === 'choice') {
+        if (normalizedValue > 0) {
+          nextDayMap[habitId] = 1;
+        } else {
+          delete nextDayMap[habitId];
+          (habit.choiceOptions ?? []).forEach((option) => {
+            delete nextDayMap[getHabitOptionKey(habitId, option.id)];
+          });
+        }
+      } else if (normalizedValue > 0) {
         nextDayMap[habitId] = normalizedValue;
       } else {
         delete nextDayMap[habitId];
@@ -504,9 +607,28 @@ export default function App() {
       return;
     }
 
-    if (habit.taskType === 'measurable') {
+    if (habit.taskType === 'choice') {
+      if (currentValue > 0) {
+        setHabitProgressForDate(habitId, 0, todayKey);
+        return;
+      }
+
+      if (habit.choiceOptions && habit.choiceOptions.length > 0) {
+        toggleChoiceOption(habitId, habit.choiceOptions[0].id, todayKey);
+      } else {
+        setHabitProgressForDate(habitId, 1, todayKey);
+      }
+      return;
+    }
+
+    if (isTargetHabit(habit)) {
       const target = habit.targetValue ?? 1;
       setHabitProgressForDate(habitId, currentValue >= target ? 0 : currentValue + 1, todayKey);
+      return;
+    }
+
+    if (isTrackerHabit(habit)) {
+      setHabitProgressForDate(habitId, currentValue > 0 ? 0 : 1, todayKey);
       return;
     }
 
@@ -518,14 +640,14 @@ export default function App() {
   };
 
   const setHabitProgressForSelectedDate = (habitId: string, rawValue: number) => {
-    if (!selectedCalendarDateKey) {
+    if (!selectedCalendarDateKey || isSelectedCalendarInFuture) {
       return;
     }
     setHabitProgressForDate(habitId, rawValue, selectedCalendarDateKey);
   };
 
   const toggleHabitCompletionForSelectedDate = (habitId: string) => {
-    if (!selectedCalendarDateKey) {
+    if (!selectedCalendarDateKey || isSelectedCalendarInFuture) {
       return;
     }
 
@@ -535,9 +657,28 @@ export default function App() {
     }
 
     const currentValue = checkIns[selectedCalendarDateKey]?.[habitId] ?? 0;
-    if (habit.taskType === 'measurable') {
+    if (habit.taskType === 'choice') {
+      if (currentValue > 0) {
+        setHabitProgressForDate(habitId, 0, selectedCalendarDateKey);
+        return;
+      }
+
+      if (habit.choiceOptions && habit.choiceOptions.length > 0) {
+        toggleChoiceOption(habitId, habit.choiceOptions[0].id, selectedCalendarDateKey);
+      } else {
+        setHabitProgressForDate(habitId, 1, selectedCalendarDateKey);
+      }
+      return;
+    }
+
+    if (isTargetHabit(habit)) {
       const target = habit.targetValue ?? 1;
       setHabitProgressForDate(habitId, currentValue >= target ? 0 : currentValue + 1, selectedCalendarDateKey);
+      return;
+    }
+
+    if (isTrackerHabit(habit)) {
+      setHabitProgressForDate(habitId, currentValue > 0 ? 0 : 1, selectedCalendarDateKey);
       return;
     }
 
@@ -548,6 +689,9 @@ export default function App() {
     const baseDate = selectedCalendarDateKey ? new Date(`${selectedCalendarDateKey}T00:00:00`) : new Date();
     setSelectedCalendarDateKey(getDateKey(addDays(baseDate, delta)));
   };
+
+  const selectedCalendarDate = selectedCalendarDateKey ? new Date(`${selectedCalendarDateKey}T00:00:00`) : new Date();
+  const isSelectedCalendarInFuture = selectedCalendarDate.getTime() > new Date(`${todayKey}T00:00:00`).getTime();
 
   useEffect(() => {
     if (!hydrated || Platform.OS !== 'ios') {
@@ -582,9 +726,19 @@ export default function App() {
         }
 
         const currentValue = todayCompletions[habitId] ?? 0;
-        if (habit.taskType === 'measurable') {
+        if (habit.taskType === 'choice') {
+          if (currentValue > 0) {
+            setHabitProgress(habitId, 0);
+          } else if (habit.choiceOptions && habit.choiceOptions.length > 0) {
+            toggleChoiceOption(habitId, habit.choiceOptions[0].id);
+          } else {
+            setHabitProgress(habitId, 1);
+          }
+        } else if (isTargetHabit(habit)) {
           const targetValue = habit.targetValue ?? 1;
           setHabitProgress(habitId, currentValue >= targetValue ? 0 : currentValue + 1);
+        } else if (isTrackerHabit(habit)) {
+          setHabitProgress(habitId, currentValue > 0 ? 0 : 1);
         } else {
           setHabitProgress(habitId, currentValue > 0 ? 0 : 1);
         }
@@ -620,31 +774,74 @@ export default function App() {
       return;
     }
 
-    if (newHabitTaskType === 'measurable' && (!Number.isFinite(parsedTarget) || parsedTarget <= 0)) {
-      setFormError('Measurable tasks need a target amount greater than 0.');
+    if ((newHabitTaskType === 'target' || newHabitTaskType === 'measurable') && (!Number.isFinite(parsedTarget) || parsedTarget <= 0)) {
+      setFormError('Target habits need an amount greater than 0.');
       return;
     }
 
     const trimmedUnit = newHabitUnit.trim();
-    if (newHabitTaskType === 'measurable' && !trimmedUnit) {
-      setFormError('Add a unit for measurable tasks.');
+    if ((newHabitTaskType === 'target' || newHabitTaskType === 'measurable' || newHabitTaskType === 'tracker') && !trimmedUnit) {
+      setFormError('Add a unit for your target or tracker habit.');
       return;
     }
 
-    const habit: Habit = {
-      id: `habit-${Date.now()}`,
-      name: trimmedName,
-      category: newHabitCategory.trim() || 'General',
-      frequency: newHabitFrequency,
-      taskType: newHabitTaskType,
-      targetValue: newHabitTaskType === 'measurable' ? Math.round(parsedTarget) : undefined,
-      measurableUnit: newHabitTaskType === 'measurable' ? trimmedUnit : undefined,
-      archived: false,
-      reminderEnabled: newHabitReminderEnabled,
-      reminderTime: newHabitReminderEnabled ? reminderTime : undefined,
-      repeatDays: newHabitRepeatDays,
-      createdAt: Date.now(),
-    };
+  const choiceOptions = newHabitTaskType === 'choice'
+    ? newHabitChoiceOptions
+        .map((option) => ({
+          ...option,
+          name: option.name.trim(),
+          targetValue: option.targetValue.trim(),
+          measurableUnit: option.measurableUnit.trim(),
+        }))
+        .filter((option) => option.name)
+    : [];
+
+  if (newHabitTaskType === 'choice') {
+    if (choiceOptions.length < 2) {
+      setFormError('Choose at least two options for an “any of these” habit.');
+      return;
+    }
+    for (const option of choiceOptions) {
+      if ((option.taskType === 'target' || option.taskType === 'tracker') && !option.measurableUnit) {
+        setFormError('Each target or tracker option needs a unit.');
+        return;
+      }
+    }
+  }
+
+  const habitTaskType: Habit['taskType'] = newHabitTaskType === 'choice'
+    ? 'choice'
+    : newHabitTaskType === 'tracker'
+      ? 'tracker'
+      : newHabitTaskType === 'target' || newHabitTaskType === 'measurable'
+        ? 'target'
+        : 'yesNo';
+
+  const habit: Habit = {
+    id: `habit-${Date.now()}`,
+    name: trimmedName,
+    category: newHabitCategory.trim() || 'General',
+    frequency: 'daily',
+    taskType: habitTaskType,
+    taskColor: newHabitTaskColor,
+    targetValue: newHabitTaskType === 'target' || newHabitTaskType === 'tracker' || newHabitTaskType === 'measurable' ? Math.round(parsedTarget) : undefined,
+    measurableUnit: newHabitTaskType === 'target' || newHabitTaskType === 'tracker' || newHabitTaskType === 'measurable' ? trimmedUnit : undefined,
+    choiceOptions: newHabitTaskType === 'choice'
+      ? choiceOptions.map((option, index) => ({
+          id: option.id || `option-${index + 1}-${Date.now()}`,
+          name: option.name,
+          taskType: option.taskType,
+          targetValue: option.taskType === 'target' ? Number(option.targetValue) || 1 : undefined,
+          measurableUnit: option.measurableUnit || undefined,
+        }))
+      : undefined,
+    randomSuggestionEnabled: newHabitTaskType === 'choice' ? newHabitRandomSuggestionEnabled : undefined,
+    archived: false,
+    reminderEnabled: newHabitReminderEnabled,
+    reminderTime: newHabitReminderEnabled ? reminderTime : undefined,
+    repeatDays: newHabitRepeatDays,
+    createdAt: Date.now(),
+  };
 
     setHabits((prev) => [habit, ...prev]);
     setNewHabitName('');
@@ -653,6 +850,13 @@ export default function App() {
     setNewHabitTaskType('yesNo');
     setNewHabitTargetValue('');
     setNewHabitUnit('');
+    setNewHabitTaskColor('#22c55e');
+    setNewHabitChoiceOptions([
+      { id: 'option-1', name: 'Walk 30 minutes', taskType: 'check', targetValue: '30', measurableUnit: 'min' },
+      { id: 'option-2', name: 'Cycle 20 minutes', taskType: 'check', targetValue: '20', measurableUnit: 'min' },
+      { id: 'option-3', name: 'Go to the gym', taskType: 'check', targetValue: '1', measurableUnit: 'session' },
+    ]);
+    setNewHabitRandomSuggestionEnabled(true);
     setNewHabitReminderEnabled(true);
     setNewHabitReminder('07:00');
     setNewHabitReminderExpanded(true);
@@ -662,12 +866,30 @@ export default function App() {
   };
 
   const applyHabitTemplate = (template: HabitTemplate) => {
+    const normalizedTaskType: 'yesNo' | 'target' | 'tracker' | 'choice' =
+      template.taskType === 'measurable' ? 'target' : template.taskType === 'tracker' ? 'tracker' : template.taskType === 'choice' ? 'choice' : template.taskType === 'target' ? 'target' : 'yesNo';
+
     setNewHabitName(template.name);
     setNewHabitCategory(template.category);
-    setNewHabitFrequency(template.frequency);
-    setNewHabitTaskType(template.taskType);
+    setNewHabitFrequency('daily');
+    setNewHabitTaskType(normalizedTaskType);
+    setNewHabitTaskColor(template.taskColor ?? '#22c55e');
     setNewHabitTargetValue(template.targetValue ? String(template.targetValue) : '');
     setNewHabitUnit(template.measurableUnit ?? '');
+    setNewHabitChoiceOptions(template.choiceOptions && template.choiceOptions.length > 0
+      ? template.choiceOptions.map((option) => ({
+          id: option.id || `temp-option-${Date.now()}-${Math.random()}`,
+          name: option.name,
+          taskType: option.taskType ?? 'check',
+          targetValue: option.targetValue ? String(option.targetValue) : '1',
+          measurableUnit: option.measurableUnit ?? 'units',
+        }))
+      : [
+          { id: 'option-1', name: 'Walk 30 minutes', taskType: 'check', targetValue: '30', measurableUnit: 'min' },
+          { id: 'option-2', name: 'Cycle 20 minutes', taskType: 'check', targetValue: '20', measurableUnit: 'min' },
+          { id: 'option-3', name: 'Go to the gym', taskType: 'check', targetValue: '1', measurableUnit: 'session' },
+        ]);
+    setNewHabitRandomSuggestionEnabled(template.randomSuggestionEnabled ?? true);
     setNewHabitReminderEnabled(true);
     setNewHabitReminder('07:00');
     setNewHabitReminderExpanded(true);
@@ -712,16 +934,36 @@ export default function App() {
     setEditingHabitId(habit.id);
     setEditHabitName(habit.name);
     setEditHabitCategory(habit.category);
+    setEditHabitTaskColor(habit.taskColor ?? '#22c55e');
     setEditHabitReminder(habit.reminderTime ?? '07:00');
     setEditHabitReminderEnabled(habit.reminderEnabled);
+    setEditHabitChoiceOptions(
+      (habit.choiceOptions && habit.choiceOptions.length > 0
+        ? habit.choiceOptions
+        : [
+            { id: `${habit.id}-option-1`, name: 'Option 1', taskType: 'check', targetValue: '1', measurableUnit: 'units' },
+            { id: `${habit.id}-option-2`, name: 'Option 2', taskType: 'check', targetValue: '1', measurableUnit: 'units' },
+          ])
+        .map((option) => ({
+          id: option.id,
+          name: option.name,
+          taskType: (option.taskType ?? 'check') as HabitChoiceFormItem['taskType'],
+          targetValue: option.targetValue ? String(option.targetValue) : '1',
+          measurableUnit: option.measurableUnit ?? 'units',
+        })),
+    );
+    setEditHabitRandomSuggestionEnabled(habit.randomSuggestionEnabled ?? true);
   };
 
   const cancelEditHabit = () => {
     setEditingHabitId(null);
     setEditHabitName('');
     setEditHabitCategory('');
+    setEditHabitTaskColor('#22c55e');
     setEditHabitReminder('07:00');
     setEditHabitReminderEnabled(true);
+    setEditHabitChoiceOptions([]);
+    setEditHabitRandomSuggestionEnabled(true);
   };
 
   const saveEditedHabit = (habitId: string) => {
@@ -736,6 +978,20 @@ export default function App() {
       return;
     }
 
+    const habitToEdit = habits.find((habit) => habit.id === habitId);
+    if (habitToEdit?.taskType === 'choice') {
+      const validOptions = editHabitChoiceOptions.map((option) => option.name.trim()).filter(Boolean);
+      if (validOptions.length < 2) {
+        return;
+      }
+
+      for (const option of editHabitChoiceOptions) {
+        if ((option.taskType === 'target' || option.taskType === 'tracker') && !option.measurableUnit.trim()) {
+          return;
+        }
+      }
+    }
+
     setHabits((prev) =>
       prev.map((habit) =>
         habit.id === habitId
@@ -743,8 +999,23 @@ export default function App() {
               ...habit,
               name: trimmedName,
               category: trimmedCategory || 'General',
+              taskColor: editHabitTaskColor,
               reminderEnabled: editHabitReminderEnabled,
               reminderTime: editHabitReminderEnabled ? editHabitReminder.trim() : undefined,
+              choiceOptions: habit.taskType === 'choice'
+                ? editHabitChoiceOptions
+                    .map((option) => ({
+                      id: option.id || `${habit.id}-option-${Date.now()}`,
+                      name: option.name.trim(),
+                      taskType: (option.taskType || 'check') as HabitChoiceFormItem['taskType'],
+                      targetValue: option.taskType === 'target' ? Number(option.targetValue) || 1 : undefined,
+                      measurableUnit: option.taskType === 'target' || option.taskType === 'tracker'
+                        ? option.measurableUnit.trim() || undefined
+                        : undefined,
+                    }))
+                    .filter((option) => option.name)
+                : habit.choiceOptions,
+              randomSuggestionEnabled: habit.taskType === 'choice' ? editHabitRandomSuggestionEnabled : habit.randomSuggestionEnabled,
             }
           : habit,
       ),
@@ -765,7 +1036,6 @@ export default function App() {
     setHabits(INITIAL_HABITS);
     setCheckIns({});
     setThemeMode('system');
-    setThemeColor('violet');
     setOnboarded(false);
     setProfileName('Ben');
     setProfileAvatar('person-circle-outline');
@@ -795,10 +1065,10 @@ export default function App() {
     return (
       <SafeAreaView style={[styles.screen, { backgroundColor: '#f7f4ff', paddingTop: topInset }]}> 
         <ExpoStatusBar style="dark" />
-        <LinearGradient colors={['#f1edff', '#ede8ff', '#ffffff']} style={styles.heroCard}>
+        <LinearGradient colors={['#edf9f1', '#e3f6ea', '#ffffff']} style={styles.heroCard}>
           <View style={styles.heroBadgeRow}>
             <View style={styles.heroBadgeIcon}>
-              <MaterialCommunityIcons name="check-decagram" size={28} color="#6653ff" />
+              <MaterialCommunityIcons name="check-decagram" size={28} color="#22c55e" />
             </View>
           </View>
           <Text style={styles.heroTopLabel}>Habitty</Text>
@@ -824,15 +1094,15 @@ export default function App() {
           {onboardingError ? <Text style={styles.onboardingError}>{onboardingError}</Text> : null}
           <View style={styles.featureList}>
             <View style={styles.heroFeatureRow}>
-              <Ionicons name="calendar-outline" size={16} color="#6653ff" />
+              <Ionicons name="calendar-outline" size={16} color="#22c55e" />
               <Text style={styles.featureText}>Track daily habits</Text>
             </View>
             <View style={styles.heroFeatureRow}>
-              <Ionicons name="bar-chart-outline" size={16} color="#6653ff" />
+              <Ionicons name="bar-chart-outline" size={16} color="#22c55e" />
               <Text style={styles.featureText}>See progress and streaks</Text>
             </View>
             <View style={styles.heroFeatureRow}>
-              <Ionicons name="shield-checkmark-outline" size={16} color="#6653ff" />
+              <Ionicons name="shield-checkmark-outline" size={16} color="#22c55e" />
               <Text style={styles.featureText}>Fully local and private</Text>
             </View>
           </View>
@@ -849,7 +1119,7 @@ export default function App() {
       <SafeAreaView style={[styles.screen, { backgroundColor: palette.bg, paddingTop: topInset }]}> 
       <ExpoStatusBar style={isDarkTheme ? 'light' : 'dark'} />
       <LinearGradient
-        colors={isDarkTheme ? ['#000000', '#000000'] : ['#f3efff', '#ebe5ff', '#f8f6ff']}
+        colors={isDarkTheme ? ['#000000', '#000000'] : ['#eafaf0', '#dff5e7', '#f5fff9']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
@@ -868,7 +1138,11 @@ export default function App() {
           >
             <View style={styles.headerLeftCol}>
               <View style={styles.headerAvatarBadge}>
-                <Ionicons name={profileAvatar as any} size={30} color="#fff" />
+                {profileAvatarImageUri ? (
+                  <Image source={{ uri: profileAvatarImageUri }} style={{ width: 44, height: 44, borderRadius: 22 }} />
+                ) : (
+                  <Ionicons name={profileAvatar as any} size={30} color="#fff" />
+                )}
               </View>
               <View>
                 <Text style={styles.headerGreeting}>Hey {profileName}! 👋</Text>
@@ -889,11 +1163,17 @@ export default function App() {
             activeHabits={activeHabits}
             todayCompletions={todayCompletions}
             checkIns={checkIns}
+            selectedDateKey={selectedCalendarDateKey ?? todayKey}
             groupByType={groupByType}
+            dailyChoiceSuggestion={dailyChoiceSuggestion}
             onSetGroupByType={setGroupByType}
             onToggleHabitCompletion={toggleHabitCompletion}
+            onToggleChoiceOption={toggleChoiceOption}
             onSetHabitProgress={setHabitProgress}
             onOpenStreak={() => setActiveTab('streak')}
+            onPreviousDay={() => moveSelectedCalendarDate(-1)}
+            onNextDay={() => moveSelectedCalendarDate(1)}
+            onToday={() => setSelectedCalendarDateKey(getDateKey(new Date()))}
           />
         )}
 
@@ -938,16 +1218,23 @@ export default function App() {
             editingHabitId={editingHabitId}
             editHabitName={editHabitName}
             editHabitCategory={editHabitCategory}
+            editHabitTaskColor={editHabitTaskColor}
             editHabitReminder={editHabitReminder}
             editHabitReminderEnabled={editHabitReminderEnabled}
+            editHabitChoiceOptions={editHabitChoiceOptions}
+            editHabitRandomSuggestionEnabled={editHabitRandomSuggestionEnabled}
             onEditHabitName={setEditHabitName}
             onEditHabitCategory={setEditHabitCategory}
+            onEditHabitTaskColor={setEditHabitTaskColor}
             onEditHabitReminder={setEditHabitReminder}
             onEditHabitReminderEnabled={setEditHabitReminderEnabled}
+            onSetEditHabitChoiceOptions={setEditHabitChoiceOptions}
+            onSetEditHabitRandomSuggestionEnabled={setEditHabitRandomSuggestionEnabled}
             onSaveEditedHabit={saveEditedHabit}
             onCancelEditHabit={cancelEditHabit}
             onStartEditHabit={startEditHabit}
             onToggleHabitCompletion={toggleHabitCompletion}
+            onToggleChoiceOption={toggleChoiceOption}
             onSetHabitProgress={setHabitProgress}
             onArchiveHabit={archiveHabit}
             onUnarchiveHabit={unarchiveHabit}
@@ -964,8 +1251,11 @@ export default function App() {
             newHabitCategory={newHabitCategory}
             newHabitFrequency={newHabitFrequency}
             newHabitTaskType={newHabitTaskType}
+            newHabitTaskColor={newHabitTaskColor}
             newHabitTargetValue={newHabitTargetValue}
             newHabitUnit={newHabitUnit}
+            newHabitChoiceOptions={newHabitChoiceOptions}
+            newHabitRandomSuggestionEnabled={newHabitRandomSuggestionEnabled}
             newHabitReminderEnabled={newHabitReminderEnabled}
             newHabitReminder={newHabitReminder}
             newHabitReminderExpanded={newHabitReminderExpanded}
@@ -975,8 +1265,11 @@ export default function App() {
             onSetNewHabitCategory={setNewHabitCategory}
             onSetNewHabitFrequency={setNewHabitFrequency}
             onSetNewHabitTaskType={setNewHabitTaskType}
+            onSetNewHabitTaskColor={setNewHabitTaskColor}
             onSetNewHabitTargetValue={setNewHabitTargetValue}
             onSetNewHabitUnit={setNewHabitUnit}
+            onSetNewHabitChoiceOptions={setNewHabitChoiceOptions}
+            onSetNewHabitRandomSuggestionEnabled={setNewHabitRandomSuggestionEnabled}
             onSetNewHabitReminderEnabled={setNewHabitReminderEnabled}
             onSetNewHabitReminder={setNewHabitReminder}
             onSetNewHabitReminderExpanded={setNewHabitReminderExpanded}
@@ -1036,7 +1329,6 @@ export default function App() {
                         </Pressable>
                         <Text style={{ color: palette.text, fontWeight: '700', flex: 1 }}>
                           {item === 'statistics' ? '📊 Statistics'
-                            : item === 'weekly' ? '📅 Weekly Completion'
                             : item === 'trend' ? '📈 Progress Over Time'
                             : item === 'habits-graph' ? '📉 Habit Completion'
                             : item === 'per-habit' ? '🔍 Per-Habit Details'
@@ -1089,22 +1381,6 @@ export default function App() {
                           ))}
                         </View>
                       ) : null}
-                    </View>
-                  );
-                }
-                if (sectionId === 'weekly') {
-                  return (
-                    <View key="weekly" style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
-                      <Text style={[styles.sectionTitle, { color: palette.text }]}>Weekly Completion</Text>
-                      {weekProgress.map((bar, index) => (
-                        <View key={`${bar.label}-${index}`} style={styles.progressRow}>
-                          <Text style={[styles.progressLabel, { color: palette.muted }]}>{bar.label}</Text>
-                          <View style={[styles.barTrack, { backgroundColor: palette.bg }]}>
-                            <View style={[styles.barFill, { width: `${bar.value}%`, backgroundColor: palette.accent }]} />
-                          </View>
-                          <Text style={[styles.progressLabel, { color: palette.text }]}>{bar.value}%</Text>
-                        </View>
-                      ))}
                     </View>
                   );
                 }
@@ -1188,8 +1464,22 @@ export default function App() {
                             <View style={{ flex: 1, minWidth: 0 }}>
                               <Text style={[styles.habitName, { color: palette.text }]} numberOfLines={1}>{stat.name}</Text>
                               <Text style={[styles.habitInfo, { color: palette.muted }]}>
-                                {stat.taskType === 'measurable' ? '📏' : '✅'} {stat.totalCompletions} total · {stat.streak}d streak
+                                {stat.taskType === 'target' || stat.taskType === 'measurable' ? '📏' : stat.taskType === 'tracker' ? '📊' : stat.taskType === 'choice' ? '🎯' : '✅'} {stat.totalCompletions} total · {stat.streak}d streak
                               </Text>
+                              {stat.taskType === 'tracker' ? (
+                                <Text style={[styles.habitInfo, { color: palette.muted }]}>
+                                  Avg {stat.average ?? 0} · Min {stat.minimum ?? 0} · Max {stat.maximum ?? 0}
+                                </Text>
+                              ) : null}
+                              {stat.taskType === 'choice' && stat.optionStats && stat.optionStats.length > 0 ? (
+                                <View style={{ marginTop: 6, gap: 2 }}>
+                                  {stat.optionStats.map((option) => (
+                                    <Text key={option.id} style={[styles.habitInfo, { color: palette.muted }]}>
+                                      • {option.name}: {option.total} times
+                                    </Text>
+                                  ))}
+                                </View>
+                              ) : null}
                             </View>
                             <View
                               style={{
@@ -1222,9 +1512,6 @@ export default function App() {
                         <Pressable onPress={() => setSelectedCalendarDateKey(getDateKey(new Date()))} style={[styles.slimCheckButton, { backgroundColor: palette.bg, borderColor: palette.border }]}> 
                           <Text style={{ color: palette.text, fontWeight: '700' }}>Today</Text>
                         </Pressable>
-                        <Pressable onPress={() => moveSelectedCalendarDate(1)} style={[styles.slimCheckButton, { backgroundColor: palette.bg, borderColor: palette.border }]}> 
-                          <Text style={{ color: palette.text, fontWeight: '700' }}>Next day</Text>
-                        </Pressable>
                       </View>
                       <View style={styles.weekdayHeader}>
                         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, index) => (
@@ -1239,13 +1526,21 @@ export default function App() {
                             return <View key={cell.key} style={[styles.calendarCell, { opacity: 0 }]} />;
                           }
                           const selected = selectedCalendarDateKey === cell.key;
+                          const cellDate = new Date(`${cell.key}T00:00:00`);
+                          const isFutureCell = cellDate.getTime() > new Date(`${todayKey}T00:00:00`).getTime();
                           return (
                             <Pressable
                               key={cell.key}
-                              onPress={() => setSelectedCalendarDateKey(cell.key)}
+                              onPress={() => {
+                                if (isFutureCell) {
+                                  return;
+                                }
+                                setSelectedCalendarDateKey(cell.key);
+                              }}
+                              disabled={isFutureCell}
                               style={[
                                 styles.calendarCell,
-                                { backgroundColor: cell.isToday ? palette.accent : palette.bg },
+                                { backgroundColor: cell.isToday ? palette.accent : palette.bg, opacity: isFutureCell ? 0.7 : 1 },
                                 selected ? { borderWidth: 1, borderColor: palette.accent } : null,
                               ]}
                             >
@@ -1291,21 +1586,80 @@ export default function App() {
                                 </View>
                                 {item.isBinary ? (
                                   <Pressable
-                                    onPress={() => toggleHabitCompletionForSelectedDate(item.id)}
-                                    style={[styles.slimCheckButton, { backgroundColor: item.done ? palette.accent : palette.bg, borderColor: palette.border }]}
+                                    onPress={() => {
+                                      if (isSelectedCalendarInFuture) {
+                                        return;
+                                      }
+                                      toggleHabitCompletionForSelectedDate(item.id);
+                                    }}
+                                    disabled={isSelectedCalendarInFuture}
+                                    style={{
+                                      width: 28,
+                                      height: 28,
+                                      borderRadius: 8,
+                                      borderWidth: 1,
+                                      borderColor: item.done ? palette.accent : palette.border,
+                                      backgroundColor: isSelectedCalendarInFuture ? palette.bg : item.done ? palette.accent : palette.bg,
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      opacity: isSelectedCalendarInFuture ? 0.45 : 1,
+                                    }}
+                                    accessibilityRole="checkbox"
+                                    accessibilityState={{ checked: item.done }}
+                                    accessibilityLabel={item.done ? `Mark ${item.name} incomplete` : `Mark ${item.name} complete`}
                                   >
-                                    <Text style={{ color: item.done ? '#fff' : palette.text, fontWeight: '700' }}>{item.done ? 'Mark incomplete' : 'Mark complete'}</Text>
+                                    <MaterialCommunityIcons
+                                      name={item.done ? 'checkbox-marked-outline' : 'checkbox-blank-outline'}
+                                      size={18}
+                                      color={item.done ? '#fff' : palette.muted}
+                                    />
                                   </Pressable>
                                 ) : (
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, opacity: isSelectedCalendarInFuture ? 0.45 : 1 }}>
                                     <Pressable
-                                      onPress={() => setHabitProgressForSelectedDate(item.id, item.value - 1)}
+                                      onPress={() => {
+                                        if (isSelectedCalendarInFuture) {
+                                          return;
+                                        }
+                                        setHabitProgressForSelectedDate(item.id, item.value - 1);
+                                      }}
+                                      disabled={isSelectedCalendarInFuture}
                                       style={[styles.checkPill, { borderColor: palette.border, backgroundColor: palette.bg }]}
                                     >
                                       <Text style={{ color: palette.text, fontWeight: '700' }}>-</Text>
                                     </Pressable>
+                                    <TextInput
+                                      value={String(item.value)}
+                                      keyboardType="number-pad"
+                                      editable={!isSelectedCalendarInFuture}
+                                      onChangeText={(text) => {
+                                        if (isSelectedCalendarInFuture) {
+                                          return;
+                                        }
+                                        const parsed = Number(text.replace(/[^0-9]/g, ''));
+                                        setHabitProgressForSelectedDate(item.id, Number.isFinite(parsed) ? parsed : 0);
+                                      }}
+                                      style={{
+                                        width: 52,
+                                        height: 30,
+                                        borderWidth: 1,
+                                        borderRadius: 8,
+                                        borderColor: palette.border,
+                                        color: palette.text,
+                                        textAlign: 'center',
+                                        backgroundColor: palette.bg,
+                                        paddingVertical: 0,
+                                        fontWeight: '700',
+                                      }}
+                                    />
                                     <Pressable
-                                      onPress={() => setHabitProgressForSelectedDate(item.id, item.value + 1)}
+                                      onPress={() => {
+                                        if (isSelectedCalendarInFuture) {
+                                          return;
+                                        }
+                                        setHabitProgressForSelectedDate(item.id, item.value + 1);
+                                      }}
+                                      disabled={isSelectedCalendarInFuture}
                                       style={[styles.checkPill, { borderColor: palette.border, backgroundColor: palette.bg }]}
                                     >
                                       <Text style={{ color: palette.text, fontWeight: '700' }}>+</Text>
@@ -1327,8 +1681,8 @@ export default function App() {
                     <View key="reminders" style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                         <Text style={[styles.sectionTitle, { color: palette.text }]}>Reminders</Text>
-                        <Pressable onPress={() => setShowReminderList((prev) => !prev)} style={[styles.slimCheckButton, { backgroundColor: palette.bg, borderColor: palette.border }]}> 
-                          <Text style={{ color: palette.text, fontWeight: '700' }}>{showReminderList ? 'Collapse' : 'Expand'}</Text>
+                        <Pressable onPress={() => setShowReminderList((prev) => !prev)} style={[styles.slimCheckButton, { backgroundColor: palette.bg, borderColor: palette.border, width: 36, paddingHorizontal: 0, alignItems: 'center' }]}> 
+                          <Ionicons name={showReminderList ? 'chevron-up' : 'chevron-down'} size={18} color={palette.accent} />
                         </Pressable>
                       </View>
                       <Text style={[styles.habitInfo, { color: palette.muted }]}> {reminderHabits.length} reminder{reminderHabits.length === 1 ? '' : 's'} configured.</Text>
@@ -1355,17 +1709,21 @@ export default function App() {
                                   borderWidth: 1,
                                   borderColor: habit.reminderMuted ? palette.accent : palette.border,
                                   borderRadius: 8,
-                                  paddingHorizontal: 8,
-                                  paddingVertical: 4,
+                                  width: 32,
+                                  height: 32,
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
                                   backgroundColor: habit.reminderMuted ? palette.accent : palette.bg,
                                   marginLeft: 8,
                                 }}
                                 accessibilityRole="button"
                                 accessibilityLabel={habit.reminderMuted ? `Unmute ${habit.name}` : `Mute ${habit.name}`}
                               >
-                                <Text style={{ color: habit.reminderMuted ? '#fff' : palette.muted, fontWeight: '700', fontSize: 11 }}>
-                                  {habit.reminderMuted ? 'Unmute' : 'Mute'}
-                                </Text>
+                                <MaterialCommunityIcons
+                                  name={habit.reminderMuted ? 'bell-off-outline' : 'bell-outline'}
+                                  size={16}
+                                  color={habit.reminderMuted ? '#fff' : palette.muted}
+                                />
                               </Pressable>
                             </View>
                           ))
@@ -1389,12 +1747,18 @@ export default function App() {
             selectedAvatar={draftProfileAvatar}
             profileAvatarImageUri={profileAvatarImageUri}
             onChangeName={setDraftProfileName}
-            onSelectAvatar={setDraftProfileAvatar}
-            onSetProfileAvatarImageUri={setProfileAvatarImageUri}
+            onSelectAvatar={(value) => {
+              setDraftProfileAvatar(value);
+              setProfileAvatarImageUri('');
+            }}
+            onSetProfileAvatarImageUri={(value) => {
+              setProfileAvatarImageUri(value);
+              if (value) {
+                setDraftProfileAvatar('person-circle-outline');
+              }
+            }}
             themeMode={themeMode}
             onSetThemeMode={setThemeMode}
-            themeColor={themeColor}
-            onSetThemeColor={setThemeColor}
             onClearAllData={clearAllData}
             onSaveProfile={saveProfile}
           />
@@ -1460,7 +1824,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     flex: 1,
     borderWidth: 1,
-    borderColor: '#e1dbff',
+    borderColor: '#d7f0df',
   },
   heroBadgeRow: {
     marginBottom: 14,
@@ -1471,37 +1835,37 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ebe5ff',
+    backgroundColor: '#d9f4e3',
   },
   heroTopLabel: {
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: 1,
     textTransform: 'uppercase',
-    color: '#4c4f7a',
+    color: '#3b6152',
   },
   heroTitle: {
     marginTop: 8,
     fontSize: 38,
     lineHeight: 42,
     fontWeight: '800',
-    color: '#1a1e3a',
+    color: '#18392d',
   },
   heroCopy: {
     marginTop: 14,
     fontSize: 16,
     lineHeight: 22,
-    color: '#4f5577',
+    color: '#4b6d5b',
   },
   onboardingInput: {
     marginTop: 16,
     borderWidth: 1,
-    borderColor: '#d8d1ff',
+    borderColor: '#d1ebdc',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#1a1e3a',
+    color: '#18392d',
     backgroundColor: '#ffffff',
   },
   onboardingError: {
@@ -1520,7 +1884,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   featureText: {
-    color: '#2f365f',
+    color: '#2f4e41',
     fontSize: 15,
     fontWeight: '600',
   },
@@ -1557,7 +1921,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   headerCaption: {
-    color: '#e7e2ff',
+    color: '#e5fff0',
     marginTop: 4,
     fontSize: 17,
     fontWeight: '600',
@@ -1581,7 +1945,7 @@ const styles = StyleSheet.create({
     fontSize: 19,
   },
   streakLabel: {
-    color: '#ece8ff',
+    color: '#ebfff2',
     fontSize: 12,
     marginTop: 2,
   },
@@ -1661,7 +2025,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   progressTitle: {
-    color: '#ecebff',
+    color: '#e8fff0',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -1671,7 +2035,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   progressCaption: {
-    color: '#e2ddff',
+    color: '#dffae9',
     fontSize: 13,
   },
   streakHeroCard: {
@@ -1693,7 +2057,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   streakHeroLabel: {
-    color: '#f1edff',
+    color: '#ebfff2',
     fontSize: 22,
     fontWeight: '700',
   },
@@ -1704,7 +2068,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   streakHeroCopy: {
-    color: '#dad2ff',
+    color: '#d8fbe7',
     textAlign: 'center',
     fontSize: 15,
     lineHeight: 22,
@@ -1721,7 +2085,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   streakSubLabel: {
-    color: '#e5dcff',
+    color: '#dffae9',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -1736,7 +2100,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   streakSubCopy: {
-    color: '#d7d2e9',
+    color: '#d4f7e4',
     fontSize: 13,
   },
   sectionCard: {

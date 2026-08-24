@@ -3,13 +3,14 @@ import { INITIAL_HABITS, STORAGE_KEY } from '../constants/habits';
 import { CheckInMap, Habit, PersistedState } from '../types/habit';
 
 function normalizeHabit(habit: Habit): Habit {
-  const taskType = habit.taskType === 'measurable' ? 'measurable' : 'yesNo';
+  const rawTaskType = habit.taskType ?? 'yesNo';
+  const taskType = rawTaskType === 'measurable' ? 'target' : rawTaskType === 'tracker' ? 'tracker' : rawTaskType === 'choice' ? 'choice' : rawTaskType === 'target' ? 'target' : 'yesNo';
   const targetValue =
-    taskType === 'measurable' && typeof habit.targetValue === 'number' && Number.isFinite(habit.targetValue)
+    (taskType === 'target' || taskType === 'tracker') && typeof habit.targetValue === 'number' && Number.isFinite(habit.targetValue)
       ? Math.max(1, Math.round(habit.targetValue))
       : undefined;
   const measurableUnit =
-    taskType === 'measurable' && typeof habit.measurableUnit === 'string' && habit.measurableUnit.trim()
+    (taskType === 'target' || taskType === 'tracker') && typeof habit.measurableUnit === 'string' && habit.measurableUnit.trim()
       ? habit.measurableUnit.trim()
       : undefined;
 
@@ -65,7 +66,6 @@ export async function loadPersistedState(): Promise<PersistedState> {
         habits: INITIAL_HABITS,
         checkIns: {},
         themeMode: 'system',
-        themeColor: 'violet',
         onboarded: false,
         profileName: 'Ben',
         profileAvatar: 'person-circle-outline',
@@ -83,17 +83,6 @@ export async function loadPersistedState(): Promise<PersistedState> {
             ? 'dark'
             : 'light'
           : 'system';
-    const inferredThemeColor =
-      parsed.themeColor === 'violet' ||
-      parsed.themeColor === 'teal' ||
-      parsed.themeColor === 'sunset' ||
-      parsed.themeColor === 'rose' ||
-      parsed.themeColor === 'forest' ||
-      parsed.themeColor === 'gray' ||
-      parsed.themeColor === 'blue' ||
-      parsed.themeColor === 'red'
-        ? parsed.themeColor
-        : 'violet';
 
     return {
       habits:
@@ -102,7 +91,6 @@ export async function loadPersistedState(): Promise<PersistedState> {
           : INITIAL_HABITS.map((habit) => normalizeHabit(habit)),
       checkIns: normalizeCheckIns(parsed.checkIns),
       themeMode: inferredThemeMode,
-      themeColor: inferredThemeColor,
       onboarded: typeof parsed.onboarded === 'boolean' ? parsed.onboarded : false,
       profileName: typeof parsed.profileName === 'string' && parsed.profileName.trim() ? parsed.profileName.trim() : 'Ben',
       profileAvatar:
@@ -118,7 +106,6 @@ export async function loadPersistedState(): Promise<PersistedState> {
       habits: INITIAL_HABITS,
       checkIns: {},
       themeMode: 'system',
-      themeColor: 'violet',
       onboarded: false,
       profileName: 'Ben',
       profileAvatar: 'person-circle-outline',

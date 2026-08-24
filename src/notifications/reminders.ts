@@ -79,7 +79,7 @@ async function scheduleHabit(habit: Habit): Promise<string[]> {
     return [];
   }
 
-  const triggers = habit.frequency === 'weekly' && habit.repeatDays.length > 0 ? habit.repeatDays : [1, 2, 3, 4, 5, 6, 0];
+  const triggers = habit.repeatDays.length > 0 ? habit.repeatDays : [1, 2, 3, 4, 5, 6, 0];
 
   const identifiers: string[] = [];
   for (const day of triggers) {

@@ -1,14 +1,27 @@
 export type TabKey = 'dashboard' | 'streak' | 'habits' | 'add' | 'progress' | 'profile';
-export type ThemeColor = 'violet' | 'teal' | 'sunset' | 'rose' | 'forest' | 'gray' | 'blue' | 'red';
+
+export type HabitChoiceOption = {
+  id: string;
+  name: string;
+  taskType?: 'check' | 'target' | 'tracker';
+  targetValue?: number;
+  measurableUnit?: string;
+};
+
+export type HabitTaskType = 'yesNo' | 'target' | 'tracker' | 'choice';
+export type LegacyHabitTaskType = HabitTaskType | 'measurable';
 
 export type Habit = {
   id: string;
   name: string;
   category: string;
-  frequency: 'daily' | 'weekly';
-  taskType: 'yesNo' | 'measurable';
+  frequency: 'daily';
+  taskType: LegacyHabitTaskType;
+  taskColor?: string;
   targetValue?: number;
   measurableUnit?: string;
+  choiceOptions?: HabitChoiceOption[];
+  randomSuggestionEnabled?: boolean;
   archived?: boolean;
   reminderEnabled: boolean;
   reminderMuted?: boolean;
@@ -21,10 +34,13 @@ export type HabitTemplate = {
   id: string;
   name: string;
   category: string;
-  frequency: 'daily' | 'weekly';
-  taskType: 'yesNo' | 'measurable';
+  frequency: 'daily';
+  taskType: LegacyHabitTaskType;
+  taskColor?: string;
   targetValue?: number;
   measurableUnit?: string;
+  choiceOptions?: HabitChoiceOption[];
+  randomSuggestionEnabled?: boolean;
   repeatDays: number[];
   featured?: boolean;
   tags: string[];
@@ -32,14 +48,13 @@ export type HabitTemplate = {
 
 export type CheckInMap = Record<string, Record<string, number>>;
 
-export const STATS_SECTION_IDS = ['statistics', 'weekly', 'trend', 'habits-graph', 'per-habit', 'calendar', 'reminders'] as const;
+export const STATS_SECTION_IDS = ['statistics', 'trend', 'habits-graph', 'per-habit', 'calendar', 'reminders'] as const;
 export type StatsSectionId = (typeof STATS_SECTION_IDS)[number];
 
 export type PersistedState = {
   habits: Habit[];
   checkIns: CheckInMap;
   themeMode: 'system' | 'light' | 'dark' | 'amoled';
-  themeColor: ThemeColor;
   onboarded: boolean;
   profileName: string;
   profileAvatar: string;
