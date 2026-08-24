@@ -26,6 +26,7 @@ import {
   countGlobalStreak,
   countLongestGlobalStreak,
   getDateKey,
+  getAlternativeGroupKey,
   getDayCompletionSummary,
   isHabitCompleteForDay,
 } from './src/logic/progress';
@@ -40,14 +41,6 @@ import { ProfileTab } from './src/components/ProfileTab';
 import { addWidgetUserInteractionListener, HabitTasksWidget } from './src/widgets/widgetBridge';
 
 const TAB_SWIPE_ORDER: TabKey[] = ['dashboard', 'habits', 'add', 'progress', 'profile'];
-
-function getAlternativeGroupKey(habit: Habit): string | null {
-  const value = habit.alternativeGroup?.trim();
-  if (!value) {
-    return null;
-  }
-  return value.toLowerCase();
-}
 
 function pickDeterministicOption(seed: string, size: number): number {
   let hash = 0;

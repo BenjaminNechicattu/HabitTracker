@@ -9,7 +9,7 @@ export function isHabitCompleteForDay(habit: Habit, dayEntries: Record<string, n
   return value > 0;
 }
 
-function getAlternativeGroupKey(habit: Habit): string | null {
+export function getAlternativeGroupKey(habit: Habit): string | null {
   const value = habit.alternativeGroup?.trim();
   if (!value) {
     return null;
