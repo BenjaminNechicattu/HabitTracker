@@ -81,6 +81,8 @@ export function HabitsTab({
     const progressLabel =
       habit.taskType === 'measurable'
         ? `Progress ${todayValue} / ${habit.targetValue ?? 1} ${habit.measurableUnit ?? 'units'}`
+        : habit.alternativeGroup
+          ? `One of: ${habit.alternativeGroup}`
         : habit.reminderEnabled
           ? `Reminder ${habit.reminderTime ?? '--:--'}`
           : 'No reminder';

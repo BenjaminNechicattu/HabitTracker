@@ -1,12 +1,56 @@
 import { eachDayOfInterval, endOfMonth, format, getDay, startOfMonth, subDays } from 'date-fns';
 import { CheckInMap, Habit } from '../types/habit';
 
-function isHabitCompleteForDay(habit: Habit, dayEntries: Record<string, number>) {
+export function isHabitCompleteForDay(habit: Habit, dayEntries: Record<string, number>) {
   const value = dayEntries[habit.id] ?? 0;
   if (habit.taskType === 'measurable') {
     return value >= (habit.targetValue ?? 1);
   }
   return value > 0;
+}
+
+function getAlternativeGroupKey(habit: Habit): string | null {
+  const value = habit.alternativeGroup?.trim();
+  if (!value) {
+    return null;
+  }
+  return value.toLowerCase();
+}
+
+export function getDayCompletionSummary(habits: Habit[], dayEntries: Record<string, number>) {
+  const groupedHabits = new Map<string, Habit[]>();
+  let total = 0;
+  let completed = 0;
+
+  for (const habit of habits) {
+    const groupKey = getAlternativeGroupKey(habit);
+    if (!groupKey) {
+      total += 1;
+      if (isHabitCompleteForDay(habit, dayEntries)) {
+        completed += 1;
+      }
+      continue;
+    }
+
+    const existing = groupedHabits.get(groupKey);
+    if (existing) {
+      existing.push(habit);
+    } else {
+      groupedHabits.set(groupKey, [habit]);
+    }
+  }
+
+  for (const options of groupedHabits.values()) {
+    total += 1;
+    if (options.some((option) => isHabitCompleteForDay(option, dayEntries))) {
+      completed += 1;
+    }
+  }
+
+  return {
+    completed,
+    total,
+  };
 }
 
 export function getDateKey(date: Date): string {
@@ -18,8 +62,8 @@ export function buildWeekProgress(checkIns: CheckInMap, habits: Habit[]) {
     const date = subDays(new Date(), 6 - idx);
     const key = getDateKey(date);
     const dayEntries = checkIns[key] ?? {};
-    const completed = habits.filter((habit) => isHabitCompleteForDay(habit, dayEntries)).length;
-    const ratio = habits.length === 0 ? 0 : completed / habits.length;
+    const summary = getDayCompletionSummary(habits, dayEntries);
+    const ratio = summary.total === 0 ? 0 : summary.completed / summary.total;
 
     return {
       label: format(date, 'EEEEE'),
@@ -109,8 +153,8 @@ export function buildCurrentMonthCalendar(checkIns: CheckInMap, habits: Habit[])
   for (const day of days) {
     const key = getDateKey(day);
     const dayEntries = checkIns[key] ?? {};
-    const completed = habits.filter((habit) => isHabitCompleteForDay(habit, dayEntries)).length;
-    const completion = habits.length === 0 ? 0 : Math.round((completed / habits.length) * 100);
+    const summary = getDayCompletionSummary(habits, dayEntries);
+    const completion = summary.total === 0 ? 0 : Math.round((summary.completed / summary.total) * 100);
     cells.push({
       key,
       label: format(day, 'd'),

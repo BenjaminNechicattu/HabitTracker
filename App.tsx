@@ -26,6 +26,8 @@ import {
   countGlobalStreak,
   countLongestGlobalStreak,
   getDateKey,
+  getDayCompletionSummary,
+  isHabitCompleteForDay,
 } from './src/logic/progress';
 import { syncHabitReminders } from './src/notifications/reminders';
 import { clearPersistedState, loadPersistedState, savePersistedState } from './src/storage/persistence';
@@ -38,6 +40,22 @@ import { ProfileTab } from './src/components/ProfileTab';
 import { addWidgetUserInteractionListener, HabitTasksWidget } from './src/widgets/widgetBridge';
 
 const TAB_SWIPE_ORDER: TabKey[] = ['dashboard', 'habits', 'add', 'progress', 'profile'];
+
+function getAlternativeGroupKey(habit: Habit): string | null {
+  const value = habit.alternativeGroup?.trim();
+  if (!value) {
+    return null;
+  }
+  return value.toLowerCase();
+}
+
+function pickDeterministicOption(seed: string, size: number): number {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  return size === 0 ? 0 : hash % size;
+}
 
 export default function App() {
   const [habits, setHabits] = useState<Habit[]>(INITIAL_HABITS);
@@ -52,6 +70,8 @@ export default function App() {
 
   const [newHabitName, setNewHabitName] = useState('');
   const [newHabitCategory, setNewHabitCategory] = useState('Health');
+  const [newHabitAlternativeGroup, setNewHabitAlternativeGroup] = useState('');
+  const [newHabitRandomSuggestionEnabled, setNewHabitRandomSuggestionEnabled] = useState(false);
   const [newHabitFrequency, setNewHabitFrequency] = useState<'daily' | 'weekly'>('daily');
   const [newHabitTaskType, setNewHabitTaskType] = useState<'yesNo' | 'measurable'>('yesNo');
   const [newHabitTargetValue, setNewHabitTargetValue] = useState('');
@@ -157,17 +177,13 @@ export default function App() {
     });
   }, [activeHabits, hydrated]);
 
-  const completedToday = useMemo(() => {
-    return activeHabits.filter((habit) => {
-      const value = todayCompletions[habit.id] ?? 0;
-      if (habit.taskType === 'measurable') {
-        return value >= (habit.targetValue ?? 1);
-      }
-      return value > 0;
-    }).length;
-  }, [activeHabits, todayCompletions]);
-
-  const todayProgress = activeHabits.length === 0 ? 0 : Math.round((completedToday / activeHabits.length) * 100);
+  const todayCompletionSummary = useMemo(
+    () => getDayCompletionSummary(activeHabits, todayCompletions),
+    [activeHabits, todayCompletions],
+  );
+  const completedToday = todayCompletionSummary.completed;
+  const totalTodayTargets = todayCompletionSummary.total;
+  const todayProgress = totalTodayTargets === 0 ? 0 : Math.round((completedToday / totalTodayTargets) * 100);
   const dayStreak = countGlobalStreak(checkIns);
   const bestStreak = countLongestGlobalStreak(checkIns);
   const weekProgress = buildWeekProgress(checkIns, activeHabits);
@@ -178,17 +194,16 @@ export default function App() {
     }
 
     const dayEntries = checkIns[selectedCalendarDateKey] ?? {};
-    const completed = activeHabits.filter((habit) => {
-      const value = dayEntries[habit.id] ?? 0;
-      return habit.taskType === 'measurable' ? value >= (habit.targetValue ?? 1) : value > 0;
-    }).length;
+    const daySummary = getDayCompletionSummary(activeHabits, dayEntries);
 
     const items = activeHabits.map((habit) => {
       const value = dayEntries[habit.id] ?? 0;
-      const done = habit.taskType === 'measurable' ? value >= (habit.targetValue ?? 1) : value > 0;
+      const done = isHabitCompleteForDay(habit, dayEntries);
       const detail =
         habit.taskType === 'measurable'
           ? `${value}/${habit.targetValue ?? 1} ${habit.measurableUnit ?? 'units'}`
+          : habit.alternativeGroup?.trim()
+            ? `Option in ${habit.alternativeGroup.trim()}`
           : done
             ? 'Completed'
             : 'Not completed';
@@ -204,9 +219,9 @@ export default function App() {
 
     return {
       dateLabel: format(new Date(`${selectedCalendarDateKey}T00:00:00`), 'EEE, MMM d'),
-      completion: activeHabits.length === 0 ? 0 : Math.round((completed / activeHabits.length) * 100),
-      completed,
-      total: activeHabits.length,
+      completion: daySummary.total === 0 ? 0 : Math.round((daySummary.completed / daySummary.total) * 100),
+      completed: daySummary.completed,
+      total: daySummary.total,
       items,
     };
   }, [selectedCalendarDateKey, checkIns, activeHabits]);
@@ -220,11 +235,8 @@ export default function App() {
       const date = subDays(new Date(), (10 - index) * 3);
       const key = getDateKey(date);
       const dayEntries = checkIns[key] ?? {};
-      const completed = activeHabits.filter((habit) => {
-        const value = dayEntries[habit.id] ?? 0;
-        return habit.taskType === 'measurable' ? value >= (habit.targetValue ?? 1) : value > 0;
-      }).length;
-      const value = activeHabits.length === 0 ? 0 : Math.round((completed / activeHabits.length) * 100);
+      const daySummary = getDayCompletionSummary(activeHabits, dayEntries);
+      const value = daySummary.total === 0 ? 0 : Math.round((daySummary.completed / daySummary.total) * 100);
 
       return {
         label: format(date, 'd'),
@@ -243,7 +255,7 @@ export default function App() {
       for (let i = 0; i < lookbackDays; i += 1) {
         const dayKey = getDateKey(subDays(new Date(), i));
         const value = checkIns[dayKey]?.[habit.id] ?? 0;
-        const done = habit.taskType === 'measurable' ? value >= (habit.targetValue ?? 1) : value > 0;
+        const done = isHabitCompleteForDay(habit, { [habit.id]: value });
         if (done) {
           completeCount += 1;
         }
@@ -272,10 +284,10 @@ export default function App() {
 
     return {
       completed: completedToday,
-      total: activeHabits.length,
+      total: totalTodayTargets,
       habits: widgetHabits,
     };
-  }, [activeHabits, todayCompletions, completedToday]);
+  }, [activeHabits, todayCompletions, completedToday, totalTodayTargets]);
 
   const trendPoints = useMemo(() => {
     const chartWidth = 260;
@@ -346,6 +358,67 @@ export default function App() {
       .filter((habit) => habit.reminderEnabled && habit.reminderTime)
       .sort((a, b) => (a.reminderTime ?? '').localeCompare(b.reminderTime ?? ''));
   }, [activeHabits]);
+
+  const dailyRandomSuggestions = useMemo(() => {
+    const groupedOptions = new Map<
+      string,
+      { groupLabel: string; suggestionEnabled: boolean; options: Array<{ id: string; name: string }> }
+    >();
+
+    for (const habit of activeHabits) {
+      const groupKey = getAlternativeGroupKey(habit);
+      const groupLabel = habit.alternativeGroup?.trim();
+      if (!groupKey || !groupLabel) {
+        continue;
+      }
+
+      const existing = groupedOptions.get(groupKey);
+      if (existing) {
+        existing.options.push({ id: habit.id, name: habit.name });
+        if (habit.randomSuggestionEnabled) {
+          existing.suggestionEnabled = true;
+        }
+      } else {
+        groupedOptions.set(groupKey, {
+          groupLabel,
+          suggestionEnabled: Boolean(habit.randomSuggestionEnabled),
+          options: [{ id: habit.id, name: habit.name }],
+        });
+      }
+    }
+
+    const suggestions: Array<{ group: string; option: string }> = [];
+    for (const [groupKey, group] of groupedOptions.entries()) {
+      if (!group.suggestionEnabled || group.options.length < 2) {
+        continue;
+      }
+      const index = pickDeterministicOption(`${todayKey}:${groupKey}`, group.options.length);
+      suggestions.push({
+        group: group.groupLabel,
+        option: group.options[index].name,
+      });
+    }
+
+    return suggestions;
+  }, [activeHabits, todayKey]);
+
+  const groupedOptionStats = useMemo(() => {
+    const optionHabits = activeHabits.filter((habit) => Boolean(getAlternativeGroupKey(habit)));
+    return optionHabits
+      .map((habit) => {
+        const completedDays = Object.values(checkIns).reduce((count, dayEntries) => {
+          return isHabitCompleteForDay(habit, dayEntries) ? count + 1 : count;
+        }, 0);
+
+        return {
+          id: habit.id,
+          group: habit.alternativeGroup?.trim() || 'Alternative options',
+          option: habit.name,
+          completedDays,
+        };
+      })
+      .sort((a, b) => b.completedDays - a.completedDays);
+  }, [activeHabits, checkIns]);
 
   const isDarkTheme = themeMode === 'system' ? systemColorScheme === 'dark' : themeMode === 'dark';
   const palette = buildPalette(isDarkTheme, themeColor);
@@ -483,6 +556,7 @@ export default function App() {
 
   const addHabit = () => {
     const trimmedName = newHabitName.trim();
+    const trimmedAlternativeGroup = newHabitAlternativeGroup.trim();
     const reminderTime = newHabitReminder.trim();
     const parsedTarget = Number(newHabitTargetValue.trim());
 
@@ -516,6 +590,8 @@ export default function App() {
       id: `habit-${Date.now()}`,
       name: trimmedName,
       category: newHabitCategory.trim() || 'General',
+      alternativeGroup: trimmedAlternativeGroup || undefined,
+      randomSuggestionEnabled: trimmedAlternativeGroup ? newHabitRandomSuggestionEnabled : undefined,
       frequency: newHabitFrequency,
       taskType: newHabitTaskType,
       targetValue: newHabitTaskType === 'measurable' ? Math.round(parsedTarget) : undefined,
@@ -530,6 +606,8 @@ export default function App() {
     setHabits((prev) => [habit, ...prev]);
     setNewHabitName('');
     setNewHabitCategory('Health');
+    setNewHabitAlternativeGroup('');
+    setNewHabitRandomSuggestionEnabled(false);
     setNewHabitFrequency('daily');
     setNewHabitTaskType('yesNo');
     setNewHabitTargetValue('');
@@ -738,10 +816,12 @@ export default function App() {
             isDarkTheme={isDarkTheme}
             todayProgress={todayProgress}
             completedToday={completedToday}
+            totalTodayTargets={totalTodayTargets}
             dayStreak={dayStreak}
             activeHabits={activeHabits}
             todayCompletions={todayCompletions}
             checkIns={checkIns}
+            randomSuggestions={dailyRandomSuggestions}
             onToggleHabitCompletion={toggleHabitCompletion}
             onSetHabitProgress={setHabitProgress}
             onOpenStreak={() => setActiveTab('streak')}
@@ -809,6 +889,8 @@ export default function App() {
             isDarkTheme={isDarkTheme}
             newHabitName={newHabitName}
             newHabitCategory={newHabitCategory}
+            newHabitAlternativeGroup={newHabitAlternativeGroup}
+            newHabitRandomSuggestionEnabled={newHabitRandomSuggestionEnabled}
             newHabitFrequency={newHabitFrequency}
             newHabitTaskType={newHabitTaskType}
             newHabitTargetValue={newHabitTargetValue}
@@ -819,6 +901,8 @@ export default function App() {
             formError={formError}
             onSetNewHabitName={setNewHabitName}
             onSetNewHabitCategory={setNewHabitCategory}
+            onSetNewHabitAlternativeGroup={setNewHabitAlternativeGroup}
+            onSetNewHabitRandomSuggestionEnabled={setNewHabitRandomSuggestionEnabled}
             onSetNewHabitFrequency={setNewHabitFrequency}
             onSetNewHabitTaskType={setNewHabitTaskType}
             onSetNewHabitTargetValue={setNewHabitTargetValue}
@@ -932,6 +1016,27 @@ export default function App() {
                   )}
                 </View>
               </View>
+            </View>
+
+            <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
+              <Text style={[styles.sectionTitle, { color: palette.text }]}>Alternative Option Stats</Text>
+              {groupedOptionStats.length === 0 ? (
+                <Text style={[styles.habitInfo, { color: palette.muted }]}>No one-of-many options configured yet.</Text>
+              ) : (
+                groupedOptionStats.map((item) => (
+                  <View key={item.id} style={[styles.reminderRow, { borderBottomColor: palette.border }]}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[styles.habitName, { color: palette.text }]} numberOfLines={1}>
+                        {item.option}
+                      </Text>
+                      <Text style={[styles.habitInfo, { color: palette.muted }]} numberOfLines={1}>
+                        {item.group}
+                      </Text>
+                    </View>
+                    <Text style={[styles.reminderTime, { color: palette.accent }]}>{item.completedDays} days</Text>
+                  </View>
+                ))
+              )}
             </View>
 
             <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 

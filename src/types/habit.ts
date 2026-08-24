@@ -5,6 +5,8 @@ export type Habit = {
   id: string;
   name: string;
   category: string;
+  alternativeGroup?: string;
+  randomSuggestionEnabled?: boolean;
   frequency: 'daily' | 'weekly';
   taskType: 'yesNo' | 'measurable';
   targetValue?: number;

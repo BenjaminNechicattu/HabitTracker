@@ -20,6 +20,8 @@ type AddHabitTabProps = {
   isDarkTheme: boolean;
   newHabitName: string;
   newHabitCategory: string;
+  newHabitAlternativeGroup: string;
+  newHabitRandomSuggestionEnabled: boolean;
   newHabitFrequency: 'daily' | 'weekly';
   newHabitTaskType: 'yesNo' | 'measurable';
   newHabitTargetValue: string;
@@ -30,6 +32,8 @@ type AddHabitTabProps = {
   formError: string;
   onSetNewHabitName: (value: string) => void;
   onSetNewHabitCategory: (value: string) => void;
+  onSetNewHabitAlternativeGroup: (value: string) => void;
+  onSetNewHabitRandomSuggestionEnabled: (value: boolean) => void;
   onSetNewHabitFrequency: (value: 'daily' | 'weekly') => void;
   onSetNewHabitTaskType: (value: 'yesNo' | 'measurable') => void;
   onSetNewHabitTargetValue: (value: string) => void;
@@ -46,6 +50,8 @@ export function AddHabitTab({
   isDarkTheme,
   newHabitName,
   newHabitCategory,
+  newHabitAlternativeGroup,
+  newHabitRandomSuggestionEnabled,
   newHabitFrequency,
   newHabitTaskType,
   newHabitTargetValue,
@@ -56,6 +62,8 @@ export function AddHabitTab({
   formError,
   onSetNewHabitName,
   onSetNewHabitCategory,
+  onSetNewHabitAlternativeGroup,
+  onSetNewHabitRandomSuggestionEnabled,
   onSetNewHabitFrequency,
   onSetNewHabitTaskType,
   onSetNewHabitTargetValue,
@@ -167,6 +175,29 @@ export function AddHabitTab({
           value={newHabitCategory}
           onChangeText={onSetNewHabitCategory}
         />
+
+        <TextInput
+          style={[styles.input, { borderColor: palette.border, color: palette.text }]}
+          placeholder="Alternative group (optional)"
+          placeholderTextColor={palette.muted}
+          value={newHabitAlternativeGroup}
+          onChangeText={onSetNewHabitAlternativeGroup}
+        />
+        <Text style={[styles.habitInfo, { color: palette.muted, marginTop: -2, marginBottom: 10 }]}>
+          Add the same group name to multiple habits to complete any one of them.
+        </Text>
+
+        <View style={styles.preferenceRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.sectionTitle, { color: palette.text, fontSize: 15 }]}>Random suggestion</Text>
+            <Text style={[styles.habitInfo, { color: palette.muted }]}>Suggest one option daily for this group</Text>
+          </View>
+          <Switch
+            value={newHabitAlternativeGroup.trim() ? newHabitRandomSuggestionEnabled : false}
+            onValueChange={onSetNewHabitRandomSuggestionEnabled}
+            disabled={!newHabitAlternativeGroup.trim()}
+          />
+        </View>
         <View style={styles.frequencyRow}>
           <Pressable
             onPress={() => onSetNewHabitFrequency('daily')}

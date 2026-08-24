@@ -21,10 +21,12 @@ type DashboardTabProps = {
   isDarkTheme: boolean;
   todayProgress: number;
   completedToday: number;
+  totalTodayTargets: number;
   dayStreak: number;
   activeHabits: Habit[];
   todayCompletions: Record<string, number>;
   checkIns: CheckInMap;
+  randomSuggestions: Array<{ group: string; option: string }>;
   onToggleHabitCompletion: (habitId: string) => void;
   onSetHabitProgress: (habitId: string, value: number) => void;
   onOpenStreak: () => void;
@@ -36,10 +38,12 @@ export function DashboardTab({
   isDarkTheme,
   todayProgress,
   completedToday,
+  totalTodayTargets,
   dayStreak,
   activeHabits,
   todayCompletions,
   checkIns,
+  randomSuggestions,
   onToggleHabitCompletion,
   onSetHabitProgress,
   onOpenStreak,
@@ -82,11 +86,23 @@ export function DashboardTab({
             <Text style={[styles.progressMainCallout, { color: progressLabelColor, fontSize: 16 }]}>Great job!</Text>
             <Text style={[styles.progressCaption, { color: progressCaptionColor }]}>You're doing amazing.</Text>
             <Text style={[styles.progressCaption, { color: progressCaptionColor }]}> 
-              {completedToday} / {activeHabits.length} done
+              {completedToday} / {totalTodayTargets} done
             </Text>
           </View>
         </View>
       </View>
+
+      {randomSuggestions.length > 0 ? (
+        <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
+          <Text style={[styles.sectionTitle, { color: palette.text }]}>Today&apos;s Option</Text>
+          {randomSuggestions.map((suggestion) => (
+            <View key={`${suggestion.group}-${suggestion.option}`} style={{ marginTop: 8 }}>
+              <Text style={[styles.habitName, { color: palette.text }]}>{suggestion.group}</Text>
+              <Text style={[styles.habitInfo, { color: palette.muted }]}>Try: {suggestion.option}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 
         <Text style={[styles.sectionTitle, { color: palette.text }]}>Today</Text>

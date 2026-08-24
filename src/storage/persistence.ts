@@ -4,6 +4,9 @@ import { CheckInMap, Habit, PersistedState } from '../types/habit';
 
 function normalizeHabit(habit: Habit): Habit {
   const taskType = habit.taskType === 'measurable' ? 'measurable' : 'yesNo';
+  const alternativeGroup =
+    typeof habit.alternativeGroup === 'string' && habit.alternativeGroup.trim() ? habit.alternativeGroup.trim() : undefined;
+  const randomSuggestionEnabled = alternativeGroup ? Boolean(habit.randomSuggestionEnabled) : undefined;
   const targetValue =
     taskType === 'measurable' && typeof habit.targetValue === 'number' && Number.isFinite(habit.targetValue)
       ? Math.max(1, Math.round(habit.targetValue))
@@ -15,6 +18,8 @@ function normalizeHabit(habit: Habit): Habit {
 
   return {
     ...habit,
+    alternativeGroup,
+    randomSuggestionEnabled,
     taskType,
     targetValue,
     measurableUnit,
