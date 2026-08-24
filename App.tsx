@@ -73,6 +73,7 @@ export default function App() {
   const [onboardingError, setOnboardingError] = useState('');
   const [toastMessage, setToastMessage] = useState('');
   const [selectedCalendarDateKey, setSelectedCalendarDateKey] = useState<string | null>(null);
+  const [showReminders, setShowReminders] = useState(false);
 
   const todayKey = getDateKey(new Date());
   const todayCompletions = checkIns[todayKey] ?? {};
@@ -1039,16 +1040,30 @@ export default function App() {
             </View>
 
             <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 
-              <Text style={[styles.sectionTitle, { color: palette.text }]}>Reminders</Text>
+              <View style={styles.reminderHeader}>
+                <Text style={[styles.sectionTitle, { color: palette.text }]}>Reminders</Text>
+                {reminderHabits.length > 0 ? (
+                  <Pressable
+                    onPress={() => setShowReminders((prev) => !prev)}
+                    accessibilityRole="button"
+                    accessibilityLabel={showReminders ? 'Collapse reminders list' : 'Expand reminders list'}
+                    style={styles.reminderToggleButton}
+                  >
+                    <Ionicons name={showReminders ? 'chevron-up' : 'chevron-down'} size={18} color={palette.accent} />
+                  </Pressable>
+                ) : null}
+              </View>
               {reminderHabits.length === 0 ? (
                 <Text style={[styles.habitInfo, { color: palette.muted }]}>No reminders enabled yet.</Text>
-              ) : (
+              ) : showReminders ? (
                 reminderHabits.map((habit) => (
                   <View key={habit.id} style={[styles.reminderRow, { borderBottomColor: palette.border }]}> 
                     <Text style={[styles.habitName, { color: palette.text }]}>{habit.name}</Text>
                     <Text style={[styles.reminderTime, { color: palette.accent }]}>{habit.reminderTime}</Text>
                   </View>
                 ))
+              ) : (
+                <Text style={[styles.habitInfo, { color: palette.muted }]}>Tap the chevron to view reminders.</Text>
               )}
             </View>
 
@@ -1742,6 +1757,18 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 11,
     fontWeight: '100',
+  },
+  reminderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  reminderToggleButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   reminderRow: {
     paddingVertical: 8,
