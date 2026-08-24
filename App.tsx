@@ -1063,7 +1063,7 @@ export default function App() {
                   </View>
                 ))
               ) : (
-                <Text style={[styles.habitInfo, { color: palette.muted }]}>Tap the chevron to view reminders.</Text>
+                <Text style={[styles.habitInfo, { color: palette.muted }]}>Tap the arrow icon to view reminders.</Text>
               )}
             </View>
 
