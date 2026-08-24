@@ -1,4 +1,4 @@
-import { Habit } from '../types/habit';
+import { Habit, HabitTemplate } from '../types/habit';
 
 export const STORAGE_KEY = 'habitty.v1';
 
@@ -49,3 +49,90 @@ export const DAY_OPTIONS = [
   { label: 'S', value: 6 },
   { label: 'S', value: 0 },
 ] as const;
+
+export const HABIT_LIBRARY_TEMPLATES: HabitTemplate[] = [
+  {
+    id: 'drink-water',
+    name: 'Drink Water',
+    category: 'Health',
+    frequency: 'daily',
+    taskType: 'measurable',
+    targetValue: 8,
+    measurableUnit: 'glasses',
+    repeatDays: [1, 2, 3, 4, 5, 6, 0],
+    featured: true,
+    tags: ['recommended', 'hydration', 'community-favorite'],
+  },
+  {
+    id: 'morning-workout',
+    name: 'Morning Workout',
+    category: 'Fitness',
+    frequency: 'daily',
+    taskType: 'yesNo',
+    repeatDays: [1, 2, 3, 4, 5],
+    featured: true,
+    tags: ['featured', 'fitness'],
+  },
+  {
+    id: 'read-daily',
+    name: 'Read 20 Minutes',
+    category: 'Learning',
+    frequency: 'daily',
+    taskType: 'yesNo',
+    repeatDays: [1, 2, 3, 4, 5, 6, 0],
+    featured: true,
+    tags: ['recommended', 'learning'],
+  },
+  {
+    id: 'gratitude-journal',
+    name: 'Gratitude Journal',
+    category: 'Mental Wellness',
+    frequency: 'daily',
+    taskType: 'yesNo',
+    repeatDays: [1, 2, 3, 4, 5, 6, 0],
+    tags: ['mental wellness'],
+  },
+  {
+    id: 'budget-check',
+    name: 'Budget Check-in',
+    category: 'Finance',
+    frequency: 'weekly',
+    taskType: 'yesNo',
+    repeatDays: [0],
+    tags: ['finance', 'weekly'],
+  },
+  {
+    id: 'deep-work',
+    name: 'Deep Work Block',
+    category: 'Productivity',
+    frequency: 'daily',
+    taskType: 'measurable',
+    targetValue: 90,
+    measurableUnit: 'minutes',
+    repeatDays: [1, 2, 3, 4, 5],
+    featured: true,
+    tags: ['productivity', 'focus'],
+  },
+  {
+    id: 'sleep-tracker',
+    name: 'Sleep Tracker',
+    category: 'Health',
+    frequency: 'daily',
+    taskType: 'measurable',
+    targetValue: 8,
+    measurableUnit: 'hours',
+    repeatDays: [1, 2, 3, 4, 5, 6, 0],
+    tags: ['health', 'sleep'],
+  },
+  {
+    id: 'screen-time',
+    name: 'Screen Time Limit',
+    category: 'Productivity',
+    frequency: 'daily',
+    taskType: 'measurable',
+    targetValue: 2,
+    measurableUnit: 'hours',
+    repeatDays: [1, 2, 3, 4, 5, 6, 0],
+    tags: ['screen time', 'limits'],
+  },
+];

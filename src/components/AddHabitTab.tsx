@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Platform, Pressable, Switch, Text, TextInput, View } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { DAY_OPTIONS } from '../constants/habits';
+import { DAY_OPTIONS, HABIT_LIBRARY_TEMPLATES } from '../constants/habits';
 import { HABIT_ICON_OPTIONS, getHabitIconName } from '../constants/habitIcons';
+import { HabitTemplate } from '../types/habit';
 
 type Palette = {
   bg: string;
@@ -26,6 +27,7 @@ type AddHabitTabProps = {
   newHabitUnit: string;
   newHabitReminderEnabled: boolean;
   newHabitReminder: string;
+  newHabitReminderExpanded: boolean;
   newHabitRepeatDays: number[];
   formError: string;
   onSetNewHabitName: (value: string) => void;
@@ -36,7 +38,9 @@ type AddHabitTabProps = {
   onSetNewHabitUnit: (value: string) => void;
   onSetNewHabitReminderEnabled: (value: boolean) => void;
   onSetNewHabitReminder: (value: string) => void;
+  onSetNewHabitReminderExpanded: (value: boolean) => void;
   onToggleRepeatDay: (day: number) => void;
+  onApplyTemplate: (template: HabitTemplate) => void;
   onAddHabit: () => void;
 };
 
@@ -52,6 +56,7 @@ export function AddHabitTab({
   newHabitUnit,
   newHabitReminderEnabled,
   newHabitReminder,
+  newHabitReminderExpanded,
   newHabitRepeatDays,
   formError,
   onSetNewHabitName,
@@ -62,11 +67,30 @@ export function AddHabitTab({
   onSetNewHabitUnit,
   onSetNewHabitReminderEnabled,
   onSetNewHabitReminder,
+  onSetNewHabitReminderExpanded,
   onToggleRepeatDay,
+  onApplyTemplate,
   onAddHabit,
 }: AddHabitTabProps) {
   const [showAllIcons, setShowAllIcons] = useState(false);
   const [showReminderTimePicker, setShowReminderTimePicker] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState('');
+  const [templateCategory, setTemplateCategory] = useState<'All' | string>('All');
+
+  const templateCategories = useMemo(() => ['All', ...new Set(HABIT_LIBRARY_TEMPLATES.map((template) => template.category))], []);
+
+  const filteredTemplates = useMemo(() => {
+    const query = templateSearch.trim().toLowerCase();
+    return HABIT_LIBRARY_TEMPLATES.filter((template) => {
+      const matchesCategory = templateCategory === 'All' || template.category === templateCategory;
+      const matchesQuery =
+        !query ||
+        template.name.toLowerCase().includes(query) ||
+        template.category.toLowerCase().includes(query) ||
+        template.tags.some((tag) => tag.toLowerCase().includes(query));
+      return matchesCategory && matchesQuery;
+    });
+  }, [templateCategory, templateSearch]);
 
   const parseReminderTime = (value: string) => {
     const match = value.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
@@ -105,6 +129,71 @@ export function AddHabitTab({
     <View style={styles.tabBody}>
       <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 
         <Text style={[styles.sectionTitle, { color: palette.text }]}>Add New Habit</Text>
+        <Text style={[styles.habitInfo, { color: palette.muted }]}>Start from a ready-made template or build your own.</Text>
+
+        <TextInput
+          style={[styles.input, { borderColor: palette.border, color: palette.text }]}
+          placeholder="Search templates"
+          placeholderTextColor={palette.muted}
+          value={templateSearch}
+          onChangeText={setTemplateSearch}
+        />
+
+        <View style={styles.frequencyRow}>
+          {templateCategories.map((category) => (
+            <Pressable
+              key={category}
+              onPress={() => setTemplateCategory(category)}
+              style={[
+                styles.frequencyButton,
+                {
+                  backgroundColor: templateCategory === category ? palette.accent : palette.bg,
+                  borderColor: palette.border,
+                },
+              ]}
+            >
+              <Text style={{ color: templateCategory === category ? '#fff' : palette.text, fontWeight: '700' }}>{category}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={{ gap: 8 }}>
+          {filteredTemplates.slice(0, 6).map((template) => (
+            <Pressable
+              key={template.id}
+              onPress={() => onApplyTemplate(template)}
+              style={{
+                borderWidth: 1,
+                borderColor: palette.border,
+                borderRadius: 14,
+                padding: 12,
+                backgroundColor: isDarkTheme ? '#171717' : '#f8f5ff',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: palette.text, fontWeight: '800' }}>{template.name}</Text>
+                  <Text style={{ color: palette.muted, marginTop: 2 }}>
+                    {template.category} · {template.taskType === 'measurable' ? `${template.targetValue ?? 1} ${template.measurableUnit ?? 'units'}` : 'Yes / No'}
+                  </Text>
+                </View>
+                <View
+                  style={{
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    borderRadius: 999,
+                    backgroundColor: template.featured ? palette.accent : palette.bg,
+                  }}
+                >
+                  <Text style={{ color: template.featured ? '#fff' : palette.text, fontSize: 11, fontWeight: '800' }}>
+                    {template.featured ? 'Featured' : 'Template'}
+                  </Text>
+                </View>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+
         <View style={[styles.addHeroIconWrap, { backgroundColor: isDarkTheme ? '#171717' : '#f4efff' }]}> 
           <Ionicons name={getHabitIconName(newHabitCategory) as any} size={34} color={palette.accent} />
         </View>
@@ -263,66 +352,94 @@ export function AddHabitTab({
             <Text style={[styles.sectionTitle, { color: palette.text, fontSize: 15 }]}>Reminder</Text>
             <Text style={[styles.habitInfo, { color: palette.muted }]}>Enable daily reminder notifications</Text>
           </View>
-          <Switch value={newHabitReminderEnabled} onValueChange={onSetNewHabitReminderEnabled} />
+          <Switch
+            value={newHabitReminderEnabled}
+            onValueChange={(value) => {
+              onSetNewHabitReminderEnabled(value);
+              if (value) {
+                onSetNewHabitReminderExpanded(true);
+              }
+            }}
+          />
         </View>
 
         <View>
           <Pressable
-            onPress={() => {
-              if (!newHabitReminderEnabled) {
-                return;
-              }
-              setShowReminderTimePicker((prev) => !prev);
-            }}
+            onPress={() => onSetNewHabitReminderExpanded(!newHabitReminderExpanded)}
             accessibilityRole="button"
-            accessibilityLabel="Choose reminder time"
-            style={[
-              styles.input,
-              {
-                borderColor: palette.border,
-                backgroundColor: newHabitReminderEnabled ? (isDarkTheme ? '#171717' : '#f8f5ff') : palette.bg,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                opacity: newHabitReminderEnabled ? 1 : 0.6,
-              },
-            ]}
+            accessibilityLabel={newHabitReminderExpanded ? 'Collapse reminder settings' : 'Expand reminder settings'}
+            style={{
+              borderWidth: 1,
+              borderColor: palette.border,
+              borderRadius: 12,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: newHabitReminderEnabled ? (isDarkTheme ? '#171717' : '#f8f5ff') : palette.bg,
+              opacity: newHabitReminderEnabled ? 1 : 0.65,
+            }}
           >
-            <Text style={{ color: palette.text, fontWeight: '700' }}>{newHabitReminder}</Text>
-            <Ionicons name="time-outline" size={18} color={palette.accent} />
+            <Text style={{ color: palette.text, fontWeight: '700' }}>{newHabitReminderEnabled ? `Reminder ${newHabitReminder}` : 'Reminders off'}</Text>
+            <Ionicons name={newHabitReminderExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={palette.accent} />
           </Pressable>
-          {newHabitReminderEnabled && showReminderTimePicker ? (
-            <View style={{ marginTop: 8 }}>
-              <DateTimePicker
-                value={reminderPickerValue}
-                mode="time"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                is24Hour
-                onChange={onReminderTimeChange}
-              />
-            </View>
-          ) : null}
-        </View>
 
-        <View style={styles.repeatDaysRow}>
-          {DAY_OPTIONS.map((day, index) => {
-            const isSelected = newHabitRepeatDays.includes(day.value);
-            return (
+          {newHabitReminderEnabled && newHabitReminderExpanded ? (
+            <View style={{ marginTop: 8, gap: 8 }}>
+              <Text style={[styles.habitInfo, { color: palette.muted }]}>Pick the time and repeat days.</Text>
               <Pressable
-                key={`${day.value}-${index}`}
-                onPress={() => onToggleRepeatDay(day.value)}
+                onPress={() => {
+                  if (!newHabitReminderEnabled) {
+                    return;
+                  }
+                  setShowReminderTimePicker((prev) => !prev);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Choose reminder time"
                 style={[
-                  styles.repeatDayButton,
+                  styles.input,
                   {
-                    backgroundColor: isSelected ? palette.accent : palette.bg,
                     borderColor: palette.border,
+                    backgroundColor: newHabitReminderEnabled ? (isDarkTheme ? '#171717' : '#f8f5ff') : palette.bg,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    opacity: newHabitReminderEnabled ? 1 : 0.6,
                   },
                 ]}
               >
-                <Text style={{ color: isSelected ? '#fff' : palette.text, fontWeight: '700' }}>{day.label}</Text>
+                <Text style={{ color: palette.text, fontWeight: '700' }}>{newHabitReminder}</Text>
+                <Ionicons name="time-outline" size={18} color={palette.accent} />
               </Pressable>
-            );
-          })}
+              {newHabitReminderEnabled && showReminderTimePicker ? (
+                <View style={{ marginTop: 4 }}>
+                  <DateTimePicker value={reminderPickerValue} mode="time" display={Platform.OS === 'ios' ? 'spinner' : 'default'} is24Hour onChange={onReminderTimeChange} />
+                </View>
+              ) : null}
+
+              <View style={styles.repeatDaysRow}>
+                {DAY_OPTIONS.map((day, index) => {
+                  const isSelected = newHabitRepeatDays.includes(day.value);
+                  return (
+                    <Pressable
+                      key={`${day.value}-${index}`}
+                      onPress={() => onToggleRepeatDay(day.value)}
+                      style={[
+                        styles.repeatDayButton,
+                        {
+                          backgroundColor: isSelected ? palette.accent : palette.bg,
+                          borderColor: palette.border,
+                        },
+                      ]}
+                    >
+                      <Text style={{ color: isSelected ? '#fff' : palette.text, fontWeight: '700' }}>{day.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
         </View>
 
         {formError ? <Text style={styles.errorText}>{formError}</Text> : null}

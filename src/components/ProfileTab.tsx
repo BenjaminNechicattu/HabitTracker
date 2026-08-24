@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Modal, Pressable, Text, TextInput, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { Image, Modal, Pressable, Text, TextInput, View } from 'react-native';
 import { ThemeColor } from '../types/habit';
 
 type Palette = {
@@ -18,10 +19,12 @@ type ProfileTabProps = {
   isDarkTheme: boolean;
   draftName: string;
   selectedAvatar: string;
+  profileAvatarImageUri?: string;
   themeMode: 'system' | 'light' | 'dark' | 'amoled';
   themeColor: ThemeColor;
   onChangeName: (value: string) => void;
   onSelectAvatar: (value: string) => void;
+  onSetProfileAvatarImageUri: (value: string) => void;
   onSetThemeMode: (value: 'system' | 'light' | 'dark' | 'amoled') => void;
   onSetThemeColor: (value: ThemeColor) => void;
   onClearAllData: () => void | Promise<void>;
@@ -60,10 +63,12 @@ export function ProfileTab({
   isDarkTheme,
   draftName,
   selectedAvatar,
+  profileAvatarImageUri,
   themeMode,
   themeColor,
   onChangeName,
   onSelectAvatar,
+  onSetProfileAvatarImageUri,
   onSetThemeMode,
   onSetThemeColor,
   onClearAllData,
@@ -72,14 +77,62 @@ export function ProfileTab({
   const [showAvatarOptions, setShowAvatarOptions] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
+  const pickAvatarImage = async (mode: 'library' | 'camera') => {
+    const permission =
+      mode === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      return;
+    }
+
+    const result =
+      mode === 'camera'
+        ? await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.9 })
+        : await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.9 });
+
+    if (!result.canceled && result.assets[0]?.uri) {
+      onSetProfileAvatarImageUri(result.assets[0].uri);
+      setShowAvatarOptions(false);
+    }
+  };
+
   return (
     <View style={styles.tabBody}>
       <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 
         <Text style={[styles.sectionTitle, { color: palette.text }]}>Profile</Text>
         <Text style={[styles.habitInfo, { color: palette.muted }]}>Edit your display name and avatar.</Text>
 
-        <View style={[styles.profileAvatarPreview, { backgroundColor: isDarkTheme ? '#171717' : '#f4efff' }]}> 
-          <Ionicons name={selectedAvatar as any} size={44} color={palette.accent} />
+        <View style={[styles.profileAvatarPreview, { backgroundColor: isDarkTheme ? '#171717' : '#f4efff', overflow: 'hidden' }]}> 
+          {profileAvatarImageUri ? (
+            <Image source={{ uri: profileAvatarImageUri }} style={{ width: '100%', height: '100%' }} />
+          ) : (
+            <Ionicons name={selectedAvatar as any} size={44} color={palette.accent} />
+          )}
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+          <Pressable
+            onPress={() => pickAvatarImage('library')}
+            style={[styles.slimCheckButton, { backgroundColor: palette.bg, borderColor: palette.border }]}
+          >
+            <Text style={{ color: palette.text, fontWeight: '700' }}>Upload photo</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => pickAvatarImage('camera')}
+            style={[styles.slimCheckButton, { backgroundColor: palette.bg, borderColor: palette.border }]}
+          >
+            <Text style={{ color: palette.text, fontWeight: '700' }}>Take photo</Text>
+          </Pressable>
+          {profileAvatarImageUri ? (
+            <Pressable
+              onPress={() => onSetProfileAvatarImageUri('')}
+              style={[styles.slimCheckButton, { backgroundColor: palette.bg, borderColor: palette.border }]}
+            >
+              <Text style={{ color: palette.text, fontWeight: '700' }}>Remove avatar</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <TextInput

@@ -2,7 +2,7 @@ import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
-import { format, subDays } from 'date-fns';
+import { addDays, format, subDays } from 'date-fns';
 import {
   PanResponder,
   Platform,
@@ -30,7 +30,7 @@ import {
 import { syncHabitReminders } from './src/notifications/reminders';
 import { clearPersistedState, loadPersistedState, savePersistedState } from './src/storage/persistence';
 import { buildPalette } from './src/theme/palette';
-import { CheckInMap, Habit, PersistedState, STATS_SECTION_IDS, StatsSectionId, TabKey, ThemeColor } from './src/types/habit';
+import { CheckInMap, Habit, HabitTemplate, PersistedState, STATS_SECTION_IDS, StatsSectionId, TabKey, ThemeColor } from './src/types/habit';
 import { AddHabitTab } from './src/components/AddHabitTab';
 import { DashboardTab } from './src/components/DashboardTab';
 import { HabitsTab } from './src/components/HabitsTab';
@@ -68,15 +68,18 @@ export default function App() {
   const [formError, setFormError] = useState('');
   const [profileName, setProfileName] = useState('Ben');
   const [profileAvatar, setProfileAvatar] = useState('person-circle-outline');
+  const [profileAvatarImageUri, setProfileAvatarImageUri] = useState('');
   const [draftProfileName, setDraftProfileName] = useState('Ben');
   const [draftProfileAvatar, setDraftProfileAvatar] = useState('person-circle-outline');
   const [onboardingName, setOnboardingName] = useState('');
   const [onboardingError, setOnboardingError] = useState('');
   const [toastMessage, setToastMessage] = useState('');
-  const [selectedCalendarDateKey, setSelectedCalendarDateKey] = useState<string | null>(null);
+  const [selectedCalendarDateKey, setSelectedCalendarDateKey] = useState<string | null>(getDateKey(new Date()));
   const [groupByType, setGroupByType] = useState(false);
   const [statsOrder, setStatsOrder] = useState<StatsSectionId[]>([...STATS_SECTION_IDS]);
   const [statsReorderMode, setStatsReorderMode] = useState(false);
+  const [newHabitReminderExpanded, setNewHabitReminderExpanded] = useState(true);
+  const [showReminderList, setShowReminderList] = useState(true);
 
   const todayKey = getDateKey(new Date());
   const todayCompletions = checkIns[todayKey] ?? {};
@@ -97,9 +100,11 @@ export default function App() {
       setOnboarded(state.onboarded);
       setProfileName(state.profileName);
       setProfileAvatar(state.profileAvatar);
+      setProfileAvatarImageUri(state.profileAvatarImageUri ?? '');
       setDraftProfileName(state.profileName);
       setDraftProfileAvatar(state.profileAvatar);
       setOnboardingName(state.profileName.trim() && state.profileName !== 'Ben' ? state.profileName : '');
+      setNewHabitReminderExpanded(state.newHabitReminderExpanded ?? true);
       if (Array.isArray(state.statsOrder) && state.statsOrder.length > 0) {
         const validOrder = state.statsOrder.filter((id): id is StatsSectionId =>
           (STATS_SECTION_IDS as readonly string[]).includes(id)
@@ -134,13 +139,15 @@ export default function App() {
       onboarded,
       profileName,
       profileAvatar,
+      profileAvatarImageUri,
       statsOrder,
+      newHabitReminderExpanded,
     };
 
     savePersistedState(payload).catch(() => {
       // Keep UI responsive if persistence fails.
     });
-  }, [habits, checkIns, themeMode, themeColor, onboarded, profileName, profileAvatar, statsOrder, hydrated]);
+  }, [habits, checkIns, themeMode, themeColor, onboarded, profileName, profileAvatar, profileAvatarImageUri, statsOrder, newHabitReminderExpanded, hydrated]);
 
   const activeHabits = useMemo(() => habits.filter((habit) => !habit.archived), [habits]);
 
@@ -208,6 +215,7 @@ export default function App() {
         id: habit.id,
         name: habit.name,
         done,
+        value,
         isBinary: habit.taskType !== 'measurable',
         detail,
       };
@@ -310,6 +318,28 @@ export default function App() {
     });
   }, [activeHabits, checkIns]);
 
+  const categoryInsights = useMemo(() => {
+    const categoryMap = new Map<string, { count: number; completed: number }>();
+
+    for (const habit of activeHabits) {
+      const current = categoryMap.get(habit.category) ?? { count: 0, completed: 0 };
+      const value = todayCompletions[habit.id] ?? 0;
+      const done = habit.taskType === 'measurable' ? value >= (habit.targetValue ?? 1) : value > 0;
+      categoryMap.set(habit.category, {
+        count: current.count + 1,
+        completed: current.completed + (done ? 1 : 0),
+      });
+    }
+
+    return [...categoryMap.entries()]
+      .map(([category, item]) => ({
+        category,
+        count: item.count,
+        rate: item.count === 0 ? 0 : Math.round((item.completed / item.count) * 100),
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [activeHabits, todayCompletions]);
+
   const widgetSnapshot = useMemo(() => {
     const widgetHabits = activeHabits.slice(0, 3).map((habit) => {
       const currentValue = todayCompletions[habit.id] ?? 0;
@@ -408,6 +438,7 @@ export default function App() {
     const nextName = trimmedName || 'Ben';
     setProfileName(nextName);
     setProfileAvatar(draftProfileAvatar || 'person-circle-outline');
+    setProfileAvatarImageUri((current) => current);
     setToastMessage(`profile updated`);
   };
 
@@ -436,24 +467,7 @@ export default function App() {
     setOnboarded(true);
   };
 
-  const toggleHabitCompletion = (habitId: string) => {
-    const habit = habits.find((item) => item.id === habitId);
-    if (!habit) {
-      return;
-    }
-
-    if (habit.taskType === 'measurable') {
-      const currentValue = todayCompletions[habitId] ?? 0;
-      const target = habit.targetValue ?? 1;
-      setHabitProgress(habitId, currentValue >= target ? 0 : currentValue + 1);
-      return;
-    }
-
-    const currentValue = todayCompletions[habitId] ?? 0;
-    setHabitProgress(habitId, currentValue > 0 ? 0 : 1);
-  };
-
-  const setHabitProgress = (habitId: string, rawValue: number) => {
+  const setHabitProgressForDate = (habitId: string, rawValue: number, dateKey: string = todayKey) => {
     const habit = habits.find((item) => item.id === habitId);
     if (!habit) {
       return;
@@ -468,7 +482,7 @@ export default function App() {
           : 0;
 
     setCheckIns((prev) => {
-      const dayMap = prev[todayKey] ?? {};
+      const dayMap = prev[dateKey] ?? {};
       const nextDayMap = { ...dayMap };
       if (normalizedValue > 0) {
         nextDayMap[habitId] = normalizedValue;
@@ -478,9 +492,61 @@ export default function App() {
 
       return {
         ...prev,
-        [todayKey]: nextDayMap,
+        [dateKey]: nextDayMap,
       };
     });
+  };
+
+  const toggleHabitCompletion = (habitId: string) => {
+    const currentValue = todayCompletions[habitId] ?? 0;
+    const habit = habits.find((item) => item.id === habitId);
+    if (!habit) {
+      return;
+    }
+
+    if (habit.taskType === 'measurable') {
+      const target = habit.targetValue ?? 1;
+      setHabitProgressForDate(habitId, currentValue >= target ? 0 : currentValue + 1, todayKey);
+      return;
+    }
+
+    setHabitProgressForDate(habitId, currentValue > 0 ? 0 : 1, todayKey);
+  };
+
+  const setHabitProgress = (habitId: string, rawValue: number) => {
+    setHabitProgressForDate(habitId, rawValue, todayKey);
+  };
+
+  const setHabitProgressForSelectedDate = (habitId: string, rawValue: number) => {
+    if (!selectedCalendarDateKey) {
+      return;
+    }
+    setHabitProgressForDate(habitId, rawValue, selectedCalendarDateKey);
+  };
+
+  const toggleHabitCompletionForSelectedDate = (habitId: string) => {
+    if (!selectedCalendarDateKey) {
+      return;
+    }
+
+    const habit = habits.find((item) => item.id === habitId);
+    if (!habit) {
+      return;
+    }
+
+    const currentValue = checkIns[selectedCalendarDateKey]?.[habitId] ?? 0;
+    if (habit.taskType === 'measurable') {
+      const target = habit.targetValue ?? 1;
+      setHabitProgressForDate(habitId, currentValue >= target ? 0 : currentValue + 1, selectedCalendarDateKey);
+      return;
+    }
+
+    setHabitProgressForDate(habitId, currentValue > 0 ? 0 : 1, selectedCalendarDateKey);
+  };
+
+  const moveSelectedCalendarDate = (delta: number) => {
+    const baseDate = selectedCalendarDateKey ? new Date(`${selectedCalendarDateKey}T00:00:00`) : new Date();
+    setSelectedCalendarDateKey(getDateKey(addDays(baseDate, delta)));
   };
 
   useEffect(() => {
@@ -589,9 +655,25 @@ export default function App() {
     setNewHabitUnit('');
     setNewHabitReminderEnabled(true);
     setNewHabitReminder('07:00');
+    setNewHabitReminderExpanded(true);
     setNewHabitRepeatDays([1, 2, 3, 4, 5]);
     setFormError('');
     setActiveTab('habits');
+  };
+
+  const applyHabitTemplate = (template: HabitTemplate) => {
+    setNewHabitName(template.name);
+    setNewHabitCategory(template.category);
+    setNewHabitFrequency(template.frequency);
+    setNewHabitTaskType(template.taskType);
+    setNewHabitTargetValue(template.targetValue ? String(template.targetValue) : '');
+    setNewHabitUnit(template.measurableUnit ?? '');
+    setNewHabitReminderEnabled(true);
+    setNewHabitReminder('07:00');
+    setNewHabitReminderExpanded(true);
+    setNewHabitRepeatDays(template.repeatDays.length > 0 ? template.repeatDays : [1, 2, 3, 4, 5]);
+    setFormError('');
+    setActiveTab('add');
   };
 
   const toggleRepeatDay = (day: number) => {
@@ -689,9 +771,11 @@ export default function App() {
     setProfileAvatar('person-circle-outline');
     setDraftProfileName('Ben');
     setDraftProfileAvatar('person-circle-outline');
+    setProfileAvatarImageUri('');
     setOnboardingName('');
     setOnboardingError('');
     setStatsOrder([...STATS_SECTION_IDS]);
+    setNewHabitReminderExpanded(true);
     setActiveTab('dashboard');
   };
 
@@ -884,6 +968,7 @@ export default function App() {
             newHabitUnit={newHabitUnit}
             newHabitReminderEnabled={newHabitReminderEnabled}
             newHabitReminder={newHabitReminder}
+            newHabitReminderExpanded={newHabitReminderExpanded}
             newHabitRepeatDays={newHabitRepeatDays}
             formError={formError}
             onSetNewHabitName={setNewHabitName}
@@ -894,7 +979,9 @@ export default function App() {
             onSetNewHabitUnit={setNewHabitUnit}
             onSetNewHabitReminderEnabled={setNewHabitReminderEnabled}
             onSetNewHabitReminder={setNewHabitReminder}
+            onSetNewHabitReminderExpanded={setNewHabitReminderExpanded}
             onToggleRepeatDay={toggleRepeatDay}
+            onApplyTemplate={applyHabitTemplate}
             onAddHabit={addHabit}
           />
         )}
@@ -991,6 +1078,17 @@ export default function App() {
                         </View>
                       </View>
                       <Text style={[styles.habitInfo, { color: palette.muted }]}>Active Days: {completionDays}</Text>
+                      {categoryInsights.length > 0 ? (
+                        <View style={{ marginTop: 12, gap: 8 }}>
+                          <Text style={[styles.sectionTitle, { color: palette.text, fontSize: 15 }]}>Category Insights</Text>
+                          {categoryInsights.map((item) => (
+                            <View key={item.category} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                              <Text style={{ color: palette.text, fontWeight: '700' }}>{item.category}</Text>
+                              <Text style={{ color: palette.muted }}>{item.count} habits · {item.rate}% complete</Text>
+                            </View>
+                          ))}
+                        </View>
+                      ) : null}
                     </View>
                   );
                 }
@@ -1117,6 +1215,17 @@ export default function App() {
                     <View key="calendar" style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
                       <Text style={[styles.sectionTitle, { color: palette.text }]}>Calendar</Text>
                       <Text style={[styles.habitInfo, { color: palette.muted }]}>{monthCalendar.monthLabel}</Text>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, marginBottom: 10, gap: 8 }}>
+                        <Pressable onPress={() => moveSelectedCalendarDate(-1)} style={[styles.slimCheckButton, { backgroundColor: palette.bg, borderColor: palette.border }]}> 
+                          <Text style={{ color: palette.text, fontWeight: '700' }}>Previous day</Text>
+                        </Pressable>
+                        <Pressable onPress={() => setSelectedCalendarDateKey(getDateKey(new Date()))} style={[styles.slimCheckButton, { backgroundColor: palette.bg, borderColor: palette.border }]}> 
+                          <Text style={{ color: palette.text, fontWeight: '700' }}>Today</Text>
+                        </Pressable>
+                        <Pressable onPress={() => moveSelectedCalendarDate(1)} style={[styles.slimCheckButton, { backgroundColor: palette.bg, borderColor: palette.border }]}> 
+                          <Text style={{ color: palette.text, fontWeight: '700' }}>Next day</Text>
+                        </Pressable>
+                      </View>
                       <View style={styles.weekdayHeader}>
                         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, index) => (
                           <Text key={`${label}-${index}`} style={[styles.weekdayLabel, { color: palette.muted }]}>
@@ -1167,20 +1276,41 @@ export default function App() {
                           <View style={styles.calendarDetailList}>
                             {selectedCalendarProgress.items.map((item) => (
                               <View key={item.id} style={styles.calendarDetailItem}>
-                                <Text
-                                  style={[
-                                    styles.calendarDetailHabitName,
-                                    { color: item.done ? palette.text : palette.muted, fontWeight: item.done ? '700' : '600' },
-                                  ]}
-                                >
-                                  {item.name}
-                                </Text>
-                                {item.isBinary && item.done ? (
-                                  <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
-                                ) : (
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                  <Text
+                                    style={[
+                                      styles.calendarDetailHabitName,
+                                      { color: item.done ? palette.text : palette.muted, fontWeight: item.done ? '700' : '600' },
+                                    ]}
+                                  >
+                                    {item.name}
+                                  </Text>
                                   <Text style={{ color: item.done ? '#22c55e' : palette.muted, fontSize: 11, fontWeight: '400' }}>
                                     {item.detail}
                                   </Text>
+                                </View>
+                                {item.isBinary ? (
+                                  <Pressable
+                                    onPress={() => toggleHabitCompletionForSelectedDate(item.id)}
+                                    style={[styles.slimCheckButton, { backgroundColor: item.done ? palette.accent : palette.bg, borderColor: palette.border }]}
+                                  >
+                                    <Text style={{ color: item.done ? '#fff' : palette.text, fontWeight: '700' }}>{item.done ? 'Mark incomplete' : 'Mark complete'}</Text>
+                                  </Pressable>
+                                ) : (
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <Pressable
+                                      onPress={() => setHabitProgressForSelectedDate(item.id, item.value - 1)}
+                                      style={[styles.checkPill, { borderColor: palette.border, backgroundColor: palette.bg }]}
+                                    >
+                                      <Text style={{ color: palette.text, fontWeight: '700' }}>-</Text>
+                                    </Pressable>
+                                    <Pressable
+                                      onPress={() => setHabitProgressForSelectedDate(item.id, item.value + 1)}
+                                      style={[styles.checkPill, { borderColor: palette.border, backgroundColor: palette.bg }]}
+                                    >
+                                      <Text style={{ color: palette.text, fontWeight: '700' }}>+</Text>
+                                    </Pressable>
+                                  </View>
                                 )}
                               </View>
                             ))}
@@ -1195,44 +1325,52 @@ export default function App() {
                 if (sectionId === 'reminders') {
                   return (
                     <View key="reminders" style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
-                      <Text style={[styles.sectionTitle, { color: palette.text }]}>Reminders</Text>
-                      {reminderHabits.length === 0 ? (
-                        <Text style={[styles.habitInfo, { color: palette.muted }]}>No reminders enabled yet.</Text>
-                      ) : (
-                        reminderHabits.map((habit) => (
-                          <View key={habit.id} style={[styles.reminderRow, { borderBottomColor: palette.border }]}>
-                            <View style={{ flex: 1, minWidth: 0 }}>
-                              <Text style={[styles.habitName, { color: habit.reminderMuted ? palette.muted : palette.text }]} numberOfLines={1}>
-                                {habit.name}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                        <Text style={[styles.sectionTitle, { color: palette.text }]}>Reminders</Text>
+                        <Pressable onPress={() => setShowReminderList((prev) => !prev)} style={[styles.slimCheckButton, { backgroundColor: palette.bg, borderColor: palette.border }]}> 
+                          <Text style={{ color: palette.text, fontWeight: '700' }}>{showReminderList ? 'Collapse' : 'Expand'}</Text>
+                        </Pressable>
+                      </View>
+                      <Text style={[styles.habitInfo, { color: palette.muted }]}> {reminderHabits.length} reminder{reminderHabits.length === 1 ? '' : 's'} configured.</Text>
+                      {showReminderList ? (
+                        reminderHabits.length === 0 ? (
+                          <Text style={[styles.habitInfo, { color: palette.muted }]}>No reminders enabled yet.</Text>
+                        ) : (
+                          reminderHabits.map((habit) => (
+                            <View key={habit.id} style={[styles.reminderRow, { borderBottomColor: palette.border }]}> 
+                              <View style={{ flex: 1, minWidth: 0 }}>
+                                <Text style={[styles.habitName, { color: habit.reminderMuted ? palette.muted : palette.text }]} numberOfLines={1}>
+                                  {habit.name}
+                                </Text>
+                                {habit.reminderMuted ? (
+                                  <Text style={{ color: palette.muted, fontSize: 11 }}>Muted</Text>
+                                ) : null}
+                              </View>
+                              <Text style={[styles.reminderTime, { color: habit.reminderMuted ? palette.muted : palette.accent }]}> 
+                                {habit.reminderTime}
                               </Text>
-                              {habit.reminderMuted ? (
-                                <Text style={{ color: palette.muted, fontSize: 11 }}>Muted</Text>
-                              ) : null}
+                              <Pressable
+                                onPress={() => muteReminder(habit.id)}
+                                style={{
+                                  borderWidth: 1,
+                                  borderColor: habit.reminderMuted ? palette.accent : palette.border,
+                                  borderRadius: 8,
+                                  paddingHorizontal: 8,
+                                  paddingVertical: 4,
+                                  backgroundColor: habit.reminderMuted ? palette.accent : palette.bg,
+                                  marginLeft: 8,
+                                }}
+                                accessibilityRole="button"
+                                accessibilityLabel={habit.reminderMuted ? `Unmute ${habit.name}` : `Mute ${habit.name}`}
+                              >
+                                <Text style={{ color: habit.reminderMuted ? '#fff' : palette.muted, fontWeight: '700', fontSize: 11 }}>
+                                  {habit.reminderMuted ? 'Unmute' : 'Mute'}
+                                </Text>
+                              </Pressable>
                             </View>
-                            <Text style={[styles.reminderTime, { color: habit.reminderMuted ? palette.muted : palette.accent }]}>
-                              {habit.reminderTime}
-                            </Text>
-                            <Pressable
-                              onPress={() => muteReminder(habit.id)}
-                              style={{
-                                borderWidth: 1,
-                                borderColor: habit.reminderMuted ? palette.accent : palette.border,
-                                borderRadius: 8,
-                                paddingHorizontal: 8,
-                                paddingVertical: 4,
-                                backgroundColor: habit.reminderMuted ? palette.accent : palette.bg,
-                                marginLeft: 8,
-                              }}
-                              accessibilityRole="button"
-                              accessibilityLabel={habit.reminderMuted ? `Unmute ${habit.name}` : `Mute ${habit.name}`}
-                            >
-                              <Text style={{ color: habit.reminderMuted ? '#fff' : palette.muted, fontWeight: '700', fontSize: 11 }}>
-                                {habit.reminderMuted ? 'Unmute' : 'Mute'}
-                              </Text>
-                            </Pressable>
-                          </View>
-                        ))
-                      )}
+                          ))
+                        )
+                      ) : null}
                     </View>
                   );
                 }
@@ -1249,8 +1387,10 @@ export default function App() {
             isDarkTheme={isDarkTheme}
             draftName={draftProfileName}
             selectedAvatar={draftProfileAvatar}
+            profileAvatarImageUri={profileAvatarImageUri}
             onChangeName={setDraftProfileName}
             onSelectAvatar={setDraftProfileAvatar}
+            onSetProfileAvatarImageUri={setProfileAvatarImageUri}
             themeMode={themeMode}
             onSetThemeMode={setThemeMode}
             themeColor={themeColor}

@@ -17,6 +17,19 @@ export type Habit = {
   createdAt: number;
 };
 
+export type HabitTemplate = {
+  id: string;
+  name: string;
+  category: string;
+  frequency: 'daily' | 'weekly';
+  taskType: 'yesNo' | 'measurable';
+  targetValue?: number;
+  measurableUnit?: string;
+  repeatDays: number[];
+  featured?: boolean;
+  tags: string[];
+};
+
 export type CheckInMap = Record<string, Record<string, number>>;
 
 export const STATS_SECTION_IDS = ['statistics', 'weekly', 'trend', 'habits-graph', 'per-habit', 'calendar', 'reminders'] as const;
@@ -32,4 +45,5 @@ export type PersistedState = {
   profileAvatar: string;
   profileAvatarImageUri?: string;
   statsOrder?: string[];
+  newHabitReminderExpanded?: boolean;
 };
