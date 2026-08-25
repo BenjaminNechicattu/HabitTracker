@@ -1,15 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { INITIAL_HABITS, STORAGE_KEY } from '../constants/habits';
-import { CheckInMap, Habit, PersistedState } from '../types/habit';
+import { CheckInMap, Habit, PersistedState, STATS_SECTION_IDS, StatsSectionId } from '../types/habit';
 
 function normalizeHabit(habit: Habit): Habit {
-  const taskType = habit.taskType === 'measurable' ? 'measurable' : 'yesNo';
+  const rawTaskType = habit.taskType ?? 'yesNo';
+  const taskType = rawTaskType === 'measurable' ? 'target' : rawTaskType === 'tracker' ? 'tracker' : rawTaskType === 'choice' ? 'choice' : rawTaskType === 'target' ? 'target' : 'yesNo';
   const targetValue =
-    taskType === 'measurable' && typeof habit.targetValue === 'number' && Number.isFinite(habit.targetValue)
+    (taskType === 'target' || taskType === 'tracker') && typeof habit.targetValue === 'number' && Number.isFinite(habit.targetValue)
       ? Math.max(1, Math.round(habit.targetValue))
       : undefined;
   const measurableUnit =
-    taskType === 'measurable' && typeof habit.measurableUnit === 'string' && habit.measurableUnit.trim()
+    (taskType === 'target' || taskType === 'tracker') && typeof habit.measurableUnit === 'string' && habit.measurableUnit.trim()
       ? habit.measurableUnit.trim()
       : undefined;
 
@@ -18,6 +19,7 @@ function normalizeHabit(habit: Habit): Habit {
     taskType,
     targetValue,
     measurableUnit,
+    reminderMuted: habit.reminderMuted === true,
   };
 }
 
@@ -64,7 +66,6 @@ export async function loadPersistedState(): Promise<PersistedState> {
         habits: INITIAL_HABITS,
         checkIns: {},
         themeMode: 'system',
-        themeColor: 'violet',
         onboarded: false,
         profileName: 'Ben',
         profileAvatar: 'person-circle-outline',
@@ -75,22 +76,18 @@ export async function loadPersistedState(): Promise<PersistedState> {
     const parsed = JSON.parse(raw) as Partial<PersistedState>;
     const legacyDarkMode = (parsed as { darkMode?: unknown }).darkMode;
     const inferredThemeMode =
-      parsed.themeMode === 'light' || parsed.themeMode === 'dark' || parsed.themeMode === 'system'
+      parsed.themeMode === 'light' || parsed.themeMode === 'dark' || parsed.themeMode === 'system' || parsed.themeMode === 'amoled'
         ? parsed.themeMode
         : typeof legacyDarkMode === 'boolean'
           ? legacyDarkMode
             ? 'dark'
             : 'light'
           : 'system';
-    const inferredThemeColor =
-      parsed.themeColor === 'violet' ||
-      parsed.themeColor === 'teal' ||
-      parsed.themeColor === 'sunset' ||
-      parsed.themeColor === 'rose' ||
-      parsed.themeColor === 'forest' ||
-      parsed.themeColor === 'gray'
-        ? parsed.themeColor
-        : 'violet';
+    const statsOrder = Array.isArray(parsed.statsOrder)
+      ? parsed.statsOrder.filter((id): id is StatsSectionId =>
+          typeof id === 'string' && (STATS_SECTION_IDS as readonly string[]).includes(id)
+        )
+      : undefined;
 
     return {
       habits:
@@ -99,7 +96,6 @@ export async function loadPersistedState(): Promise<PersistedState> {
           : INITIAL_HABITS.map((habit) => normalizeHabit(habit)),
       checkIns: normalizeCheckIns(parsed.checkIns),
       themeMode: inferredThemeMode,
-      themeColor: inferredThemeColor,
       onboarded: typeof parsed.onboarded === 'boolean' ? parsed.onboarded : false,
       profileName: typeof parsed.profileName === 'string' && parsed.profileName.trim() ? parsed.profileName.trim() : 'Ben',
       profileAvatar:
@@ -108,13 +104,14 @@ export async function loadPersistedState(): Promise<PersistedState> {
           : 'person-circle-outline',
       profileAvatarImageUri:
         typeof parsed.profileAvatarImageUri === 'string' ? parsed.profileAvatarImageUri : '',
+      statsOrder: statsOrder && statsOrder.length > 0 ? statsOrder : undefined,
+      newHabitReminderExpanded: typeof parsed.newHabitReminderExpanded === 'boolean' ? parsed.newHabitReminderExpanded : undefined,
     };
   } catch {
     return {
       habits: INITIAL_HABITS,
       checkIns: {},
       themeMode: 'system',
-      themeColor: 'violet',
       onboarded: false,
       profileName: 'Ben',
       profileAvatar: 'person-circle-outline',

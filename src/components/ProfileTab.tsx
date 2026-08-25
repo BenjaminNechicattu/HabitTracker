@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Modal, Pressable, Text, TextInput, View } from 'react-native';
-import { ThemeColor } from '../types/habit';
+import * as ImagePicker from 'expo-image-picker';
+import { Image, Modal, Pressable, Text, TextInput, View } from 'react-native';
 
 type Palette = {
   bg: string;
@@ -18,24 +18,15 @@ type ProfileTabProps = {
   isDarkTheme: boolean;
   draftName: string;
   selectedAvatar: string;
-  themeMode: 'system' | 'light' | 'dark';
-  themeColor: ThemeColor;
+  profileAvatarImageUri?: string;
+  themeMode: 'system' | 'light' | 'dark' | 'amoled';
   onChangeName: (value: string) => void;
   onSelectAvatar: (value: string) => void;
-  onSetThemeMode: (value: 'system' | 'light' | 'dark') => void;
-  onSetThemeColor: (value: ThemeColor) => void;
+  onSetProfileAvatarImageUri: (value: string) => void;
+  onSetThemeMode: (value: 'system' | 'light' | 'dark' | 'amoled') => void;
   onClearAllData: () => void | Promise<void>;
   onSaveProfile: () => void;
 };
-
-const THEME_COLOR_OPTIONS: { key: ThemeColor; label: string; color: string }[] = [
-  { key: 'violet', label: 'Violet', color: '#7e66ff' },
-  { key: 'teal', label: 'Teal', color: '#15b2ae' },
-  { key: 'sunset', label: 'Sunset', color: '#ef863f' },
-  { key: 'rose', label: 'Rose', color: '#dc5d92' },
-  { key: 'forest', label: 'Forest', color: '#2f8f4e' },
-  { key: 'gray', label: 'Gray', color: '#7f8791' },
-];
 
 const AVATAR_OPTIONS = [
   'person-circle-outline',
@@ -58,17 +49,38 @@ export function ProfileTab({
   isDarkTheme,
   draftName,
   selectedAvatar,
+  profileAvatarImageUri,
   themeMode,
-  themeColor,
   onChangeName,
   onSelectAvatar,
+  onSetProfileAvatarImageUri,
   onSetThemeMode,
-  onSetThemeColor,
   onClearAllData,
   onSaveProfile,
 }: ProfileTabProps) {
   const [showAvatarOptions, setShowAvatarOptions] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const pickAvatarImage = async (mode: 'library' | 'camera') => {
+    const permission =
+      mode === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      return;
+    }
+
+    const result =
+      mode === 'camera'
+        ? await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.9 })
+        : await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.9 });
+
+    if (!result.canceled && result.assets[0]?.uri) {
+      onSetProfileAvatarImageUri(result.assets[0].uri);
+      setShowAvatarOptions(false);
+    }
+  };
 
   return (
     <View style={styles.tabBody}>
@@ -76,8 +88,35 @@ export function ProfileTab({
         <Text style={[styles.sectionTitle, { color: palette.text }]}>Profile</Text>
         <Text style={[styles.habitInfo, { color: palette.muted }]}>Edit your display name and avatar.</Text>
 
-        <View style={[styles.profileAvatarPreview, { backgroundColor: isDarkTheme ? '#171717' : '#f4efff' }]}> 
-          <Ionicons name={selectedAvatar as any} size={44} color={palette.accent} />
+        <View style={[styles.profileAvatarPreview, { backgroundColor: isDarkTheme ? '#171717' : '#edf9f1', overflow: 'hidden' }]}> 
+          {profileAvatarImageUri ? (
+            <Image source={{ uri: profileAvatarImageUri }} style={{ width: '100%', height: '100%' }} />
+          ) : (
+            <Ionicons name={selectedAvatar as any} size={44} color={palette.accent} />
+          )}
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+          <Pressable
+            onPress={() => pickAvatarImage('library')}
+            style={[styles.slimCheckButton, { backgroundColor: palette.bg, borderColor: palette.border }]}
+          >
+            <Text style={{ color: palette.text, fontWeight: '700' }}>Upload photo</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => pickAvatarImage('camera')}
+            style={[styles.slimCheckButton, { backgroundColor: palette.bg, borderColor: palette.border }]}
+          >
+            <Text style={{ color: palette.text, fontWeight: '700' }}>Take photo</Text>
+          </Pressable>
+          {profileAvatarImageUri ? (
+            <Pressable
+              onPress={() => onSetProfileAvatarImageUri('')}
+              style={[styles.slimCheckButton, { backgroundColor: palette.bg, borderColor: palette.border }]}
+            >
+              <Text style={{ color: palette.text, fontWeight: '700' }}>Remove avatar</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <TextInput
@@ -100,7 +139,7 @@ export function ProfileTab({
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            backgroundColor: isDarkTheme ? '#171717' : '#f8f5ff',
+            backgroundColor: isDarkTheme ? '#171717' : '#f1faf4',
           }}
         >
           <Text style={{ color: palette.text, fontWeight: '700' }}>Choose avatar</Text>
@@ -118,7 +157,7 @@ export function ProfileTab({
                   style={[
                     styles.profileAvatarChip,
                     {
-                      backgroundColor: active ? palette.accent : isDarkTheme ? '#171717' : '#f4efff',
+                      backgroundColor: active ? palette.accent : isDarkTheme ? '#171717' : '#edf9f1',
                       borderColor: palette.border,
                     },
                   ]}
@@ -145,7 +184,7 @@ export function ProfileTab({
       <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 
         <View>
           <Text style={[styles.sectionTitle, { color: palette.text }]}>Theme</Text>
-          <Text style={[styles.habitInfo, { color: palette.muted }]}>Choose system, light, or dark mode.</Text>
+          <Text style={[styles.habitInfo, { color: palette.muted }]}>Choose system, light, dark, or AMOLED mode.</Text>
         </View>
         <View style={styles.frequencyRow}>
           <Pressable
@@ -184,33 +223,20 @@ export function ProfileTab({
           >
             <Text style={{ color: themeMode === 'dark' ? '#fff' : palette.text, fontWeight: '700' }}>Dark</Text>
           </Pressable>
+          <Pressable
+            onPress={() => onSetThemeMode('amoled')}
+            style={[
+              styles.frequencyButton,
+              {
+                backgroundColor: themeMode === 'amoled' ? palette.accent : palette.bg,
+                borderColor: palette.border,
+              },
+            ]}
+          >
+            <Text style={{ color: themeMode === 'amoled' ? '#fff' : palette.text, fontWeight: '700' }}>AMOLED</Text>
+          </Pressable>
         </View>
 
-        <Text style={[styles.habitInfo, { color: palette.muted, marginTop: 8 }]}>Theme palette</Text>
-        <View style={styles.profileAvatarGrid}>
-          {THEME_COLOR_OPTIONS.map((option) => {
-            const active = option.key === themeColor;
-            return (
-              <Pressable
-                key={option.key}
-                onPress={() => onSetThemeColor(option.key)}
-                accessibilityRole="button"
-                accessibilityLabel={`Set ${option.label} theme color`}
-                style={[
-                  styles.profileAvatarChip,
-                  {
-                    backgroundColor: option.color,
-                    borderColor: active ? '#ffffff' : palette.border,
-                    borderWidth: active ? 3 : 1,
-                    width: 42,
-                    height: 42,
-                    borderRadius: 21,
-                  },
-                ]}
-              />
-            );
-          })}
-        </View>
       </View>
 
       <View style={[styles.sectionCard, { backgroundColor: palette.card, borderColor: palette.border }]}> 

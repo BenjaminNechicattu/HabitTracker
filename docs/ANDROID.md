@@ -104,3 +104,32 @@ eas build -p android --profile preview
 
 - Fast local UI/device testing: `npm run android`
 - Shareable installable APK for testers: `npx -y eas-cli@latest build -p android --profile preview`
+
+## 7) GitHub integration (automated EAS builds)
+
+This repo now includes a GitHub Actions workflow at `.github/workflows/eas-android-build.yml`.
+
+### One-time setup
+
+1. Create an Expo access token at Expo dashboard:
+   - Account settings -> Access Tokens -> Create token
+2. In GitHub, open this repository:
+   - Settings -> Secrets and variables -> Actions -> New repository secret
+   - Name: `EXPO_TOKEN`
+   - Value: your Expo access token
+3. Ensure the Expo project is linked to this repo (`eas project:init` if needed).
+
+### What the workflow does
+
+- Runs on every push to `main` (uses `preview` profile by default)
+- Can also be started manually from GitHub Actions with selected profile:
+  - `preview` (APK/internal distribution)
+  - `production` (AAB/Play Store bundle)
+
+### Build command used in CI
+
+```bash
+eas build --platform android --profile <preview|production> --non-interactive --no-wait
+```
+
+`--no-wait` means GitHub finishes after triggering the build; check status on expo.dev or with `eas build:list`.

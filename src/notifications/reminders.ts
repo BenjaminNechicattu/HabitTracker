@@ -75,11 +75,11 @@ export async function requestReminderPermissions(): Promise<boolean> {
 
 async function scheduleHabit(habit: Habit): Promise<string[]> {
   const parsedTime = parseReminderTime(habit.reminderTime);
-  if (!habit.reminderEnabled || !parsedTime) {
+  if (!habit.reminderEnabled || habit.reminderMuted || !parsedTime) {
     return [];
   }
 
-  const triggers = habit.frequency === 'weekly' && habit.repeatDays.length > 0 ? habit.repeatDays : [1, 2, 3, 4, 5, 6, 0];
+  const triggers = habit.repeatDays.length > 0 ? habit.repeatDays : [1, 2, 3, 4, 5, 6, 0];
 
   const identifiers: string[] = [];
   for (const day of triggers) {

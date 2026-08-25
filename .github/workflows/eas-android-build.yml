@@ -1,0 +1,45 @@
+name: EAS Android Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: EAS build profile to run
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
+  push:
+    branches:
+      - main
+
+jobs:
+  build_android:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Expo and EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          token: ${{ secrets.EXPO_TOKEN }}
+          eas-version: latest
+
+      - name: Trigger EAS Android build
+        env:
+          EAS_PROFILE: ${{ github.event.inputs.profile || 'preview' }}
+        run: eas build --platform android --profile "$EAS_PROFILE" --non-interactive --no-wait

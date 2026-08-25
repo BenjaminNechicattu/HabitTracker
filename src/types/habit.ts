@@ -1,30 +1,61 @@
 export type TabKey = 'dashboard' | 'streak' | 'habits' | 'add' | 'progress' | 'profile';
-export type ThemeColor = 'violet' | 'teal' | 'sunset' | 'rose' | 'forest' | 'gray';
+
+export type HabitChoiceOption = {
+  id: string;
+  name: string;
+};
+
+export type HabitTaskType = 'yesNo' | 'target' | 'tracker' | 'choice';
+export type LegacyHabitTaskType = HabitTaskType | 'measurable';
 
 export type Habit = {
   id: string;
   name: string;
   category: string;
-  frequency: 'daily' | 'weekly';
-  taskType: 'yesNo' | 'measurable';
+  frequency: 'daily';
+  taskType: LegacyHabitTaskType;
+  taskColor?: string;
   targetValue?: number;
   measurableUnit?: string;
+  choiceOptions?: HabitChoiceOption[];
+  randomSuggestionEnabled?: boolean;
   archived?: boolean;
   reminderEnabled: boolean;
+  reminderMuted?: boolean;
   reminderTime?: string;
   repeatDays: number[];
   createdAt: number;
 };
 
+export type HabitTemplate = {
+  id: string;
+  name: string;
+  category: string;
+  frequency: 'daily';
+  taskType: LegacyHabitTaskType;
+  taskColor?: string;
+  targetValue?: number;
+  measurableUnit?: string;
+  choiceOptions?: HabitChoiceOption[];
+  randomSuggestionEnabled?: boolean;
+  repeatDays: number[];
+  featured?: boolean;
+  tags: string[];
+};
+
 export type CheckInMap = Record<string, Record<string, number>>;
+
+export const STATS_SECTION_IDS = ['statistics', 'trend', 'habits-graph', 'per-habit', 'calendar', 'reminders'] as const;
+export type StatsSectionId = (typeof STATS_SECTION_IDS)[number];
 
 export type PersistedState = {
   habits: Habit[];
   checkIns: CheckInMap;
-  themeMode: 'system' | 'light' | 'dark';
-  themeColor: ThemeColor;
+  themeMode: 'system' | 'light' | 'dark' | 'amoled';
   onboarded: boolean;
   profileName: string;
   profileAvatar: string;
   profileAvatarImageUri?: string;
+  statsOrder?: StatsSectionId[];
+  newHabitReminderExpanded?: boolean;
 };
