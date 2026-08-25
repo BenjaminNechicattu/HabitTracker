@@ -3,9 +3,6 @@ export type TabKey = 'dashboard' | 'streak' | 'habits' | 'add' | 'progress' | 'p
 export type HabitChoiceOption = {
   id: string;
   name: string;
-  taskType?: 'check' | 'target' | 'tracker';
-  targetValue?: number;
-  measurableUnit?: string;
 };
 
 export type HabitTaskType = 'yesNo' | 'target' | 'tracker' | 'choice';
@@ -59,6 +56,6 @@ export type PersistedState = {
   profileName: string;
   profileAvatar: string;
   profileAvatarImageUri?: string;
-  statsOrder?: string[];
+  statsOrder?: StatsSectionId[];
   newHabitReminderExpanded?: boolean;
 };

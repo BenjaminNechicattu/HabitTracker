@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { INITIAL_HABITS, STORAGE_KEY } from '../constants/habits';
-import { CheckInMap, Habit, PersistedState } from '../types/habit';
+import { CheckInMap, Habit, PersistedState, STATS_SECTION_IDS, StatsSectionId } from '../types/habit';
 
 function normalizeHabit(habit: Habit): Habit {
   const rawTaskType = habit.taskType ?? 'yesNo';
@@ -83,6 +83,11 @@ export async function loadPersistedState(): Promise<PersistedState> {
             ? 'dark'
             : 'light'
           : 'system';
+    const statsOrder = Array.isArray(parsed.statsOrder)
+      ? parsed.statsOrder.filter((id): id is StatsSectionId =>
+          typeof id === 'string' && (STATS_SECTION_IDS as readonly string[]).includes(id)
+        )
+      : undefined;
 
     return {
       habits:
@@ -99,7 +104,8 @@ export async function loadPersistedState(): Promise<PersistedState> {
           : 'person-circle-outline',
       profileAvatarImageUri:
         typeof parsed.profileAvatarImageUri === 'string' ? parsed.profileAvatarImageUri : '',
-      statsOrder: Array.isArray(parsed.statsOrder) ? (parsed.statsOrder as string[]) : undefined,
+      statsOrder: statsOrder && statsOrder.length > 0 ? statsOrder : undefined,
+      newHabitReminderExpanded: typeof parsed.newHabitReminderExpanded === 'boolean' ? parsed.newHabitReminderExpanded : undefined,
     };
   } catch {
     return {

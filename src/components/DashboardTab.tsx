@@ -66,6 +66,9 @@ export function DashboardTab({
   const todayDateKey = getDateKey(new Date());
 
   const selectedDateValues = checkIns[selectedDateKey] ?? {};
+  const yesNoHabits = activeHabits.filter((h) => h.taskType === 'yesNo');
+  const choiceHabits = activeHabits.filter((h) => h.taskType === 'choice');
+  const goalAndTrackerHabits = activeHabits.filter((h) => h.taskType === 'target' || h.taskType === 'measurable' || h.taskType === 'tracker');
 
   const renderHabitRow = (habit: Habit) => {
     const todayValue = selectedDateValues[habit.id] ?? 0;
@@ -267,16 +270,22 @@ export function DashboardTab({
           <Text style={[styles.habitInfo, { color: palette.muted }]}>No active habits yet.</Text>
         ) : groupByType ? (
           <>
-            {activeHabits.some((h) => h.taskType !== 'target' && h.taskType !== 'measurable' && h.taskType !== 'tracker') ? (
+            {yesNoHabits.length > 0 ? (
               <View>
                 <Text style={[styles.habitInfo, { color: palette.accent, fontWeight: '800', marginBottom: 4 }]}>✅ Check</Text>
-                {activeHabits.filter((h) => h.taskType !== 'target' && h.taskType !== 'measurable' && h.taskType !== 'tracker').map((habit) => renderHabitRow(habit))}
+                {yesNoHabits.map((habit) => renderHabitRow(habit))}
               </View>
             ) : null}
-            {activeHabits.some((h) => h.taskType === 'target' || h.taskType === 'measurable' || h.taskType === 'tracker') ? (
-              <View style={{ marginTop: activeHabits.some((h) => h.taskType !== 'target' && h.taskType !== 'measurable' && h.taskType !== 'tracker') ? 10 : 0 }}>
+            {choiceHabits.length > 0 ? (
+              <View style={{ marginTop: yesNoHabits.length > 0 ? 10 : 0 }}>
+                <Text style={[styles.habitInfo, { color: palette.accent, fontWeight: '800', marginBottom: 4 }]}>🎯 Choice</Text>
+                {choiceHabits.map((habit) => renderHabitRow(habit))}
+              </View>
+            ) : null}
+            {goalAndTrackerHabits.length > 0 ? (
+              <View style={{ marginTop: yesNoHabits.length > 0 || choiceHabits.length > 0 ? 10 : 0 }}>
                 <Text style={[styles.habitInfo, { color: palette.accent, fontWeight: '800', marginBottom: 4 }]}>📊 Goals & Trackers</Text>
-                {activeHabits.filter((h) => h.taskType === 'target' || h.taskType === 'measurable' || h.taskType === 'tracker').map((habit) => renderHabitRow(habit))}
+                {goalAndTrackerHabits.map((habit) => renderHabitRow(habit))}
               </View>
             ) : null}
           </>

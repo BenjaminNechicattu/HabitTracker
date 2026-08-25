@@ -45,9 +45,6 @@ const TAB_SWIPE_ORDER: TabKey[] = ['dashboard', 'habits', 'add', 'progress', 'pr
 type HabitChoiceFormItem = {
   id: string;
   name: string;
-  taskType: 'check' | 'target' | 'tracker';
-  targetValue: string;
-  measurableUnit: string;
 };
 
 const TASK_COLOR_OPTIONS = ['#22c55e', '#6653ff', '#f97316', '#ef4444', '#0ea5e9', '#ec4899', '#14b8a6', '#facc15'];
@@ -70,9 +67,9 @@ export default function App() {
   const [newHabitUnit, setNewHabitUnit] = useState('');
   const [newHabitTaskColor, setNewHabitTaskColor] = useState('#22c55e');
   const [newHabitChoiceOptions, setNewHabitChoiceOptions] = useState<HabitChoiceFormItem[]>([
-    { id: 'option-1', name: 'Walk 30 minutes', taskType: 'check', targetValue: '30', measurableUnit: 'min' },
-    { id: 'option-2', name: 'Cycle 20 minutes', taskType: 'check', targetValue: '20', measurableUnit: 'min' },
-    { id: 'option-3', name: 'Go to the gym', taskType: 'check', targetValue: '1', measurableUnit: 'session' },
+    { id: 'option-1', name: 'Walk 30 minutes' },
+    { id: 'option-2', name: 'Cycle 20 minutes' },
+    { id: 'option-3', name: 'Go to the gym' },
   ]);
   const [newHabitRandomSuggestionEnabled, setNewHabitRandomSuggestionEnabled] = useState(true);
   const [newHabitReminderEnabled, setNewHabitReminderEnabled] = useState(true);
@@ -91,6 +88,7 @@ export default function App() {
   const [profileAvatarImageUri, setProfileAvatarImageUri] = useState('');
   const [draftProfileName, setDraftProfileName] = useState('Ben');
   const [draftProfileAvatar, setDraftProfileAvatar] = useState('person-circle-outline');
+  const [draftProfileAvatarImageUri, setDraftProfileAvatarImageUri] = useState('');
   const [onboardingName, setOnboardingName] = useState('');
   const [onboardingError, setOnboardingError] = useState('');
   const [toastMessage, setToastMessage] = useState('');
@@ -126,6 +124,7 @@ export default function App() {
       setProfileAvatarImageUri(state.profileAvatarImageUri ?? '');
       setDraftProfileName(state.profileName);
       setDraftProfileAvatar(state.profileAvatar);
+      setDraftProfileAvatarImageUri(state.profileAvatarImageUri ?? '');
       setOnboardingName(state.profileName.trim() && state.profileName !== 'Ben' ? state.profileName : '');
       setNewHabitReminderExpanded(state.newHabitReminderExpanded ?? true);
       if (Array.isArray(state.statsOrder) && state.statsOrder.length > 0) {
@@ -305,21 +304,38 @@ export default function App() {
   }, [activeHabits, checkIns]);
 
   const perHabitStats = useMemo(() => {
+    const lookbackDays = 30;
+    const baseDate = new Date();
+    const lookbackDayKeys = Array.from({ length: lookbackDays }, (_, i) => getDateKey(subDays(baseDate, i)));
+    const allDayEntries = Object.values(checkIns);
+
     return activeHabits.map((habit) => {
-      const lookbackDays = 30;
       let completeCount = 0;
       let streak = 0;
       let streakRunning = true;
       let totalCompletions = 0;
+      const trackerValues: number[] = [];
+      const optionTotals = new Map<string, number>();
+      const optionPrefix = `${habit.id}::`;
 
-      for (const dayEntries of Object.values(checkIns)) {
+      for (const dayEntries of allDayEntries) {
         if (isHabitCompleteForDay(habit, dayEntries)) {
           totalCompletions += 1;
         }
+        const value = dayEntries[habit.id] ?? 0;
+        if (value > 0 && (habit.taskType === 'tracker' || habit.taskType === 'target' || habit.taskType === 'measurable')) {
+          trackerValues.push(value);
+        }
+        for (const [entryKey, entryValue] of Object.entries(dayEntries)) {
+          if (!entryValue || !entryKey.startsWith(optionPrefix)) {
+            continue;
+          }
+          const optionId = entryKey.slice(optionPrefix.length);
+          optionTotals.set(optionId, (optionTotals.get(optionId) ?? 0) + 1);
+        }
       }
 
-      for (let i = 0; i < lookbackDays; i += 1) {
-        const dayKey = getDateKey(subDays(new Date(), i));
+      for (const dayKey of lookbackDayKeys) {
         const done = isHabitCompleteForDay(habit, checkIns[dayKey] ?? {});
         if (done) {
           completeCount += 1;
@@ -332,26 +348,12 @@ export default function App() {
       }
 
       const optionStats = (habit.choiceOptions ?? []).map((option) => {
-        let optionCount = 0;
-        for (const dayEntries of Object.values(checkIns)) {
-          if (dayEntries[getHabitOptionKey(habit.id, option.id)]) {
-            optionCount += 1;
-          }
-        }
         return {
           id: option.id,
           name: option.name,
-          total: optionCount,
+          total: optionTotals.get(option.id) ?? 0,
         };
       });
-
-      const trackerValues: number[] = [];
-      for (const dayEntries of Object.values(checkIns)) {
-        const value = dayEntries[habit.id] ?? 0;
-        if (value > 0 && (habit.taskType === 'tracker' || habit.taskType === 'target' || habit.taskType === 'measurable')) {
-          trackerValues.push(value);
-        }
-      }
 
       const average = trackerValues.length > 0 ? trackerValues.reduce((sum, value) => sum + value, 0) / trackerValues.length : 0;
       const minimum = trackerValues.length > 0 ? Math.min(...trackerValues) : 0;
@@ -491,7 +493,7 @@ export default function App() {
     const nextName = trimmedName || 'Ben';
     setProfileName(nextName);
     setProfileAvatar(draftProfileAvatar || 'person-circle-outline');
-    setProfileAvatarImageUri(profileAvatarImageUri);
+    setProfileAvatarImageUri(draftProfileAvatarImageUri);
     setToastMessage('profile updated');
   };
 
@@ -790,8 +792,6 @@ export default function App() {
         .map((option) => ({
           ...option,
           name: option.name.trim(),
-          targetValue: option.targetValue.trim(),
-          measurableUnit: option.measurableUnit.trim(),
         }))
         .filter((option) => option.name)
     : [];
@@ -800,12 +800,6 @@ export default function App() {
     if (choiceOptions.length < 2) {
       setFormError('Choose at least two options for an “any of these” habit.');
       return;
-    }
-    for (const option of choiceOptions) {
-      if ((option.taskType === 'target' || option.taskType === 'tracker') && !option.measurableUnit) {
-        setFormError('Each target or tracker option needs a unit.');
-        return;
-      }
     }
   }
 
@@ -830,9 +824,6 @@ export default function App() {
       ? choiceOptions.map((option, index) => ({
           id: option.id || `option-${index + 1}-${Date.now()}`,
           name: option.name,
-          taskType: option.taskType,
-          targetValue: option.taskType === 'target' ? Number(option.targetValue) || 1 : undefined,
-          measurableUnit: option.measurableUnit || undefined,
         }))
       : undefined,
     randomSuggestionEnabled: newHabitTaskType === 'choice' ? newHabitRandomSuggestionEnabled : undefined,
@@ -852,9 +843,9 @@ export default function App() {
     setNewHabitUnit('');
     setNewHabitTaskColor('#22c55e');
     setNewHabitChoiceOptions([
-      { id: 'option-1', name: 'Walk 30 minutes', taskType: 'check', targetValue: '30', measurableUnit: 'min' },
-      { id: 'option-2', name: 'Cycle 20 minutes', taskType: 'check', targetValue: '20', measurableUnit: 'min' },
-      { id: 'option-3', name: 'Go to the gym', taskType: 'check', targetValue: '1', measurableUnit: 'session' },
+      { id: 'option-1', name: 'Walk 30 minutes' },
+      { id: 'option-2', name: 'Cycle 20 minutes' },
+      { id: 'option-3', name: 'Go to the gym' },
     ]);
     setNewHabitRandomSuggestionEnabled(true);
     setNewHabitReminderEnabled(true);
@@ -880,14 +871,11 @@ export default function App() {
       ? template.choiceOptions.map((option) => ({
           id: option.id || `temp-option-${Date.now()}-${Math.random()}`,
           name: option.name,
-          taskType: option.taskType ?? 'check',
-          targetValue: option.targetValue ? String(option.targetValue) : '1',
-          measurableUnit: option.measurableUnit ?? 'units',
         }))
       : [
-          { id: 'option-1', name: 'Walk 30 minutes', taskType: 'check', targetValue: '30', measurableUnit: 'min' },
-          { id: 'option-2', name: 'Cycle 20 minutes', taskType: 'check', targetValue: '20', measurableUnit: 'min' },
-          { id: 'option-3', name: 'Go to the gym', taskType: 'check', targetValue: '1', measurableUnit: 'session' },
+          { id: 'option-1', name: 'Walk 30 minutes' },
+          { id: 'option-2', name: 'Cycle 20 minutes' },
+          { id: 'option-3', name: 'Go to the gym' },
         ]);
     setNewHabitRandomSuggestionEnabled(template.randomSuggestionEnabled ?? true);
     setNewHabitReminderEnabled(true);
@@ -941,15 +929,12 @@ export default function App() {
       (habit.choiceOptions && habit.choiceOptions.length > 0
         ? habit.choiceOptions
         : [
-            { id: `${habit.id}-option-1`, name: 'Option 1', taskType: 'check', targetValue: '1', measurableUnit: 'units' },
-            { id: `${habit.id}-option-2`, name: 'Option 2', taskType: 'check', targetValue: '1', measurableUnit: 'units' },
+            { id: `${habit.id}-option-1`, name: 'Option 1' },
+            { id: `${habit.id}-option-2`, name: 'Option 2' },
           ])
         .map((option) => ({
           id: option.id,
           name: option.name,
-          taskType: (option.taskType ?? 'check') as HabitChoiceFormItem['taskType'],
-          targetValue: option.targetValue ? String(option.targetValue) : '1',
-          measurableUnit: option.measurableUnit ?? 'units',
         })),
     );
     setEditHabitRandomSuggestionEnabled(habit.randomSuggestionEnabled ?? true);
@@ -985,11 +970,6 @@ export default function App() {
         return;
       }
 
-      for (const option of editHabitChoiceOptions) {
-        if ((option.taskType === 'target' || option.taskType === 'tracker') && !option.measurableUnit.trim()) {
-          return;
-        }
-      }
     }
 
     setHabits((prev) =>
@@ -1007,11 +987,6 @@ export default function App() {
                     .map((option) => ({
                       id: option.id || `${habit.id}-option-${Date.now()}`,
                       name: option.name.trim(),
-                      taskType: (option.taskType || 'check') as HabitChoiceFormItem['taskType'],
-                      targetValue: option.taskType === 'target' ? Number(option.targetValue) || 1 : undefined,
-                      measurableUnit: option.taskType === 'target' || option.taskType === 'tracker'
-                        ? option.measurableUnit.trim() || undefined
-                        : undefined,
                     }))
                     .filter((option) => option.name)
                 : habit.choiceOptions,
@@ -1042,6 +1017,7 @@ export default function App() {
     setDraftProfileName('Ben');
     setDraftProfileAvatar('person-circle-outline');
     setProfileAvatarImageUri('');
+    setDraftProfileAvatarImageUri('');
     setOnboardingName('');
     setOnboardingError('');
     setStatsOrder([...STATS_SECTION_IDS]);
@@ -1745,14 +1721,14 @@ export default function App() {
             isDarkTheme={isDarkTheme}
             draftName={draftProfileName}
             selectedAvatar={draftProfileAvatar}
-            profileAvatarImageUri={profileAvatarImageUri}
+            profileAvatarImageUri={draftProfileAvatarImageUri}
             onChangeName={setDraftProfileName}
             onSelectAvatar={(value) => {
               setDraftProfileAvatar(value);
-              setProfileAvatarImageUri('');
+              setDraftProfileAvatarImageUri('');
             }}
             onSetProfileAvatarImageUri={(value) => {
-              setProfileAvatarImageUri(value);
+              setDraftProfileAvatarImageUri(value);
               if (value) {
                 setDraftProfileAvatar('person-circle-outline');
               }

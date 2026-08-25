@@ -18,9 +18,6 @@ type Palette = {
 type ChoiceOptionInput = {
   id: string;
   name: string;
-  taskType: 'check' | 'target' | 'tracker';
-  targetValue: string;
-  measurableUnit: string;
 };
 
 type AddHabitTabProps = {
@@ -464,70 +461,12 @@ export function AddHabitTab({
                     </Pressable>
                   ) : null}
                 </View>
-
-                <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-                  {(['check', 'target', 'tracker'] as const).map((taskType) => (
-                    <Pressable
-                      key={`${option.id}-${taskType}`}
-                      onPress={() => {
-                        const next = [...newHabitChoiceOptions];
-                        next[index] = {
-                          ...option,
-                          taskType,
-                          measurableUnit: taskType === 'check' ? '' : option.measurableUnit || 'units',
-                          targetValue: taskType === 'target' ? option.targetValue || '1' : option.targetValue,
-                        };
-                        onSetNewHabitChoiceOptions(next);
-                      }}
-                      style={{
-                        borderWidth: 1,
-                        borderRadius: 999,
-                        paddingHorizontal: 8,
-                        paddingVertical: 4,
-                        backgroundColor: option.taskType === taskType ? palette.accent : palette.bg,
-                        borderColor: palette.border,
-                      }}
-                    >
-                      <Text style={{ color: option.taskType === taskType ? '#fff' : palette.text, fontWeight: '700', fontSize: 11 }}>
-                        {taskType === 'check' ? 'Check' : taskType === 'target' ? 'Target' : 'Track'}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-
-                {(option.taskType === 'target' || option.taskType === 'tracker') ? (
-                  <View style={{ gap: 8 }}>
-                    <TextInput
-                      style={[styles.input, { borderColor: palette.border, color: palette.text }]}
-                      placeholder={option.taskType === 'target' ? 'Target amount' : 'Track value'}
-                      placeholderTextColor={palette.muted}
-                      keyboardType="number-pad"
-                      value={option.targetValue}
-                      onChangeText={(text) => {
-                        const next = [...newHabitChoiceOptions];
-                        next[index] = { ...option, targetValue: text };
-                        onSetNewHabitChoiceOptions(next);
-                      }}
-                    />
-                    <TextInput
-                      style={[styles.input, { borderColor: palette.border, color: palette.text }]}
-                      placeholder="Unit (e.g. mins, kg, ₹)"
-                      placeholderTextColor={palette.muted}
-                      value={option.measurableUnit}
-                      onChangeText={(text) => {
-                        const next = [...newHabitChoiceOptions];
-                        next[index] = { ...option, measurableUnit: text };
-                        onSetNewHabitChoiceOptions(next);
-                      }}
-                    />
-                  </View>
-                ) : null}
               </View>
             ))}
             <Pressable
               onPress={() => onSetNewHabitChoiceOptions([
                 ...newHabitChoiceOptions,
-                { id: `choice-option-${Date.now()}-${Math.random()}`, name: '', taskType: 'check', targetValue: '1', measurableUnit: 'units' },
+                { id: `choice-option-${Date.now()}-${Math.random()}`, name: '' },
               ])}
               style={{
                 alignSelf: 'flex-start',
