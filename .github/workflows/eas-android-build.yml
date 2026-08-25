@@ -39,5 +39,5 @@ jobs:
       - name: Trigger EAS Android build
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EAS_PROFILE: ${{ github.event.inputs.profile || 'preview' }}
+          EAS_PROFILE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.profile || 'production' }}
         run: eas build --platform android --profile "$EAS_PROFILE" --non-interactive --no-wait
