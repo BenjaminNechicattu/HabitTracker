@@ -153,6 +153,7 @@ The implementation roadmap and architecture decisions are documented in **DEV_PL
 | `overview.md` | Product vision & design documentation |
 | `DEV_PLAN.md` | Development roadmap & architecture |
 | `ANDROID.md` | Android build & deployment guide |
+| `PRIVACY_POLICY.md` | Privacy policy for Habitty and Play Console listing |
 
 ---
 
