@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { INITIAL_HABITS, STORAGE_KEY } from '../constants/habits';
 import { CheckInMap, Habit, PersistedState, STATS_SECTION_IDS, StatsSectionId } from '../types/habit';
 
-function normalizeHabit(habit: Habit): Habit {
+export function normalizeHabit(habit: Habit): Habit {
   const rawTaskType = habit.taskType ?? 'yesNo';
   const taskType = rawTaskType === 'measurable' ? 'target' : rawTaskType === 'tracker' ? 'tracker' : rawTaskType === 'choice' ? 'choice' : rawTaskType === 'target' ? 'target' : 'yesNo';
   const targetValue =
@@ -23,7 +23,7 @@ function normalizeHabit(habit: Habit): Habit {
   };
 }
 
-function normalizeCheckIns(raw: unknown): CheckInMap {
+export function normalizeCheckIns(raw: unknown): CheckInMap {
   if (!raw || typeof raw !== 'object') {
     return {};
   }
@@ -104,6 +104,8 @@ export async function loadPersistedState(): Promise<PersistedState> {
           : 'person-circle-outline',
       profileAvatarImageUri:
         typeof parsed.profileAvatarImageUri === 'string' ? parsed.profileAvatarImageUri : '',
+      weekStartsOn: parsed.weekStartsOn === 1 ? 1 : 0,
+      hapticsEnabled: typeof parsed.hapticsEnabled === 'boolean' ? parsed.hapticsEnabled : true,
       statsOrder: statsOrder && statsOrder.length > 0 ? statsOrder : undefined,
       newHabitReminderExpanded: typeof parsed.newHabitReminderExpanded === 'boolean' ? parsed.newHabitReminderExpanded : undefined,
     };
@@ -133,5 +135,53 @@ export async function clearPersistedState(): Promise<void> {
     await AsyncStorage.removeItem(STORAGE_KEY);
   } catch {
     // Ignore cleanup errors.
+  }
+}
+
+const BACKUP_APP_ID = 'habitty';
+
+export function serializeBackup(state: PersistedState): string {
+  return JSON.stringify(
+    {
+      app: BACKUP_APP_ID,
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data: {
+        habits: state.habits,
+        checkIns: state.checkIns,
+        profileName: state.profileName,
+      },
+    },
+    null,
+    2,
+  );
+}
+
+export type ParsedBackup = {
+  habits: Habit[];
+  checkIns: CheckInMap;
+  profileName?: string;
+};
+
+/** Returns null when the file is not a valid Habitty backup. */
+export function parseBackup(raw: string): ParsedBackup | null {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const payload = (parsed && typeof parsed === 'object' && 'data' in parsed ? parsed.data : parsed) as Partial<PersistedState> | undefined;
+    if (!payload || !Array.isArray(payload.habits)) {
+      return null;
+    }
+
+    const habits = (payload.habits as Habit[])
+      .filter((habit) => habit && typeof habit.id === 'string' && typeof habit.name === 'string')
+      .map((habit) => normalizeHabit({ ...habit, repeatDays: Array.isArray(habit.repeatDays) ? habit.repeatDays : [0, 1, 2, 3, 4, 5, 6] }));
+
+    return {
+      habits,
+      checkIns: normalizeCheckIns(payload.checkIns),
+      profileName: typeof payload.profileName === 'string' && payload.profileName.trim() ? payload.profileName.trim() : undefined,
+    };
+  } catch {
+    return null;
   }
 }

@@ -1,4 +1,4 @@
-export type TabKey = 'dashboard' | 'streak' | 'habits' | 'add' | 'progress' | 'profile';
+export type TabKey = 'today' | 'habits' | 'insights' | 'calendar' | 'settings';
 
 export type HabitChoiceOption = {
   id: string;
@@ -56,6 +56,9 @@ export type PersistedState = {
   profileName: string;
   profileAvatar: string;
   profileAvatarImageUri?: string;
+  weekStartsOn?: 0 | 1;
+  hapticsEnabled?: boolean;
+  // Legacy UI preferences kept so existing saved data round-trips untouched.
   statsOrder?: StatsSectionId[];
   newHabitReminderExpanded?: boolean;
 };
