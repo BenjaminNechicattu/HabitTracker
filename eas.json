@@ -25,6 +25,18 @@
       "android": {
         "track": "production"
       }
+    },
+    "alpha": {
+      "android": {
+        "track": "alpha",
+        "releaseStatus": "completed"
+      }
+    },
+    "internal": {
+      "android": {
+        "track": "internal",
+        "releaseStatus": "completed"
+      }
     }
   }
 }
