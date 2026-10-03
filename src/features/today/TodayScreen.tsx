@@ -94,7 +94,6 @@ export function TodayScreen() {
             <LargeTitle
               title={title}
               eyebrow={eyebrow}
-              trailing={<RoundButton icon="add" label="New habit" onPress={() => nav.push({ name: 'form' })} filled />}
             />
           </View>
         </View>

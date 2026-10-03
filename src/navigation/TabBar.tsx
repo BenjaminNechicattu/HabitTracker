@@ -48,8 +48,7 @@ export function TabBar({ active, onChange }: { active: TabKey; onChange: (tab: T
   const insets = useSafeAreaInsets();
 
   return (
-    // 'box-none' only works as a prop (it is not a valid CSS value on web).
-    <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right: 0, bottom: Math.max(insets.bottom, 12) + 4, alignItems: 'center', zIndex: 20, elevation: 20 }}>
+    <View style={{ alignItems: 'center', paddingBottom: Math.max(insets.bottom, 12) + 8 }}>
       <View
         accessibilityRole="tablist"
         style={{

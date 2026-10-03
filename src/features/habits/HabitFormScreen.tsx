@@ -123,23 +123,35 @@ export function HabitFormScreen({ habitId }: { habitId?: string }) {
     const amount = Math.round(Number(target));
 
     if (!trimmedName) {
-      return setError('Give your habit a name.');
+      setError('Give your habit a name.');
+      showToast('Habit name is required', { icon: 'alert-circle', tone: 'danger' });
+      return;
     }
     if (kind === 'target' && (!Number.isFinite(amount) || amount <= 0)) {
-      return setError('Goals need an amount greater than 0.');
+      setError('Goals need an amount greater than 0.');
+      showToast('Daily goal must be greater than zero', { icon: 'alert-circle', tone: 'danger' });
+      return;
     }
     if ((kind === 'target' || kind === 'tracker') && !trimmedUnit) {
-      return setError('Add a unit, like “glasses” or “minutes”.');
+      setError('Add a unit, like “glasses” or “minutes”.');
+      showToast('Add a unit for this habit', { icon: 'alert-circle', tone: 'danger' });
+      return;
     }
     const cleanOptions = options.map((option) => ({ ...option, name: option.name.trim() })).filter((option) => option.name);
     if (kind === 'choice' && cleanOptions.length < 2) {
-      return setError('Add at least two options to choose from.');
+      setError('Add at least two options to choose from.');
+      showToast('Add at least two options', { icon: 'alert-circle', tone: 'danger' });
+      return;
     }
     if (repeatDays.length === 0) {
-      return setError('Pick at least one day.');
+      setError('Pick at least one day.');
+      showToast('Choose at least one repeat day', { icon: 'alert-circle', tone: 'danger' });
+      return;
     }
     if (reminderOn && !/^([01]\d|2[0-3]):([0-5]\d)$/.test(reminderTime.trim())) {
-      return setError('Use a valid time like 07:30.');
+      setError('Use a valid time like 07:30.');
+      showToast('Reminder time must be a valid time', { icon: 'alert-circle', tone: 'danger' });
+      return;
     }
 
     const input: HabitInput = {

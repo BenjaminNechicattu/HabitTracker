@@ -9,6 +9,7 @@ import { StoreProvider, useStore } from './src/store/HabitStore';
 import { ToastHost } from './src/ui/ToastHost';
 import { Screen } from './src/ui/Screen';
 import { Skeleton } from './src/ui/Skeleton';
+import { InstallPrompt } from './src/ui/InstallPrompt';
 import { View } from 'react-native';
 import { spacing } from './src/design/tokens';
 
@@ -42,6 +43,7 @@ function Shell() {
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <StatusBar style={colors.isDark ? 'light' : 'dark'} />
       {content}
+      <InstallPrompt />
       <ToastHost />
     </View>
   );

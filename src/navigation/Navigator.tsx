@@ -47,11 +47,16 @@ export function Navigator() {
   const { tab, stack, setTab } = useNav();
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg, overflow: 'visible' }}>
       <Animated.View key={tab} entering={FadeIn.duration(180)} style={{ flex: 1 }}>
         <TabContent />
       </Animated.View>
-      {stack.length === 0 ? <TabBar active={tab} onChange={setTab} /> : null}
+
+      {stack.length === 0 ? (
+        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', pointerEvents: 'box-none', zIndex: 20, elevation: 20 }}>
+          <TabBar active={tab} onChange={setTab} />
+        </View>
+      ) : null}
 
       {stack.map((route, index) => (
         <Animated.View

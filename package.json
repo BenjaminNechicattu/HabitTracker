@@ -1,6 +1,6 @@
 {
   "name": "habitty",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "main": "index.ts",
   "dependencies": {
     "@expo/ui": "~57.0.4",
