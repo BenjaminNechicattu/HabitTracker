@@ -21,6 +21,9 @@ export const HABIT_ICON_OPTIONS: HabitIconOption[] = [
   { category: 'Work', icon: 'briefcase-outline', keywords: ['work', 'career', 'office'] },
   { category: 'Home', icon: 'home-outline', keywords: ['home', 'house', 'chores'] },
   { category: 'Nature', icon: 'flower-outline', keywords: ['nature', 'outdoor', 'garden'] },
+  { category: 'Finance', icon: 'wallet-outline', keywords: ['finance', 'money', 'budget', 'expense', 'saving'] },
+  { category: 'Productivity', icon: 'rocket-outline', keywords: ['productivity', 'productive'] },
+  { category: 'Wellness', icon: 'happy-outline', keywords: ['wellness', 'mood', 'mental'] },
 ];
 
 export function getHabitIconName(category: string): string {
